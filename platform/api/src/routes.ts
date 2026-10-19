@@ -8,6 +8,7 @@ import { companyRoutes } from "./modules/companies/routes.ts";
 import { crmRoutes } from "./modules/crm/routes.ts";
 import { workRoutes } from "./modules/crm/work.ts";
 import { orgRoutes } from "./modules/orgs/routes.ts";
+import { auditRoutes } from "./modules/audit/routes.ts";
 
 export const registerRoutes: FastifyPluginAsyncZod = async (app) => {
   await app.register(healthRoutes);
@@ -19,4 +20,5 @@ export const registerRoutes: FastifyPluginAsyncZod = async (app) => {
   await app.register(enrichmentRoutes);
   await app.register(crmRoutes);
   await app.register(workRoutes);
+  await app.register(auditRoutes);
 };

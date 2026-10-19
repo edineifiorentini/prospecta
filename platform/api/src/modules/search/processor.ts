@@ -7,6 +7,7 @@ import { upsertDiscovered } from "../companies/upsert.ts";
 import { mapCsvRow, type ColumnMapping } from "../imports/csv-import.ts";
 import { CancelledError, matchesFilters, searchFiltersSchema, searchParamsSchema, type DiscoveredCompany, type ProgressUpdate } from "../sources/types.ts";
 import { getAdapter } from "./registry.ts";
+import { recomputeDataQuality } from "../audit/service.ts";
 
 export const csvRowsKey = (searchJobId: string) => `pp:csvjob:${searchJobId}`;
 
@@ -91,6 +92,7 @@ export async function processSearchJob(job: Job<SearchJobData>) {
           { organizationId: sj.organizationId, source: sj.provider, sourceRef, searchJobId: id, userId: sj.createdById, fallbackCity, fallbackState },
           rec,
         );
+        await recomputeDataQuality(r.companyId).catch(() => undefined);
         if (r.isNew) imported++;
         else duplicates++;
         await prisma.searchResult.create({

@@ -4,6 +4,7 @@ import { logger } from "../lib/logger.ts";
 import { QUEUES, queue } from "../queues/index.ts";
 import { processSearchJob } from "../modules/search/processor.ts";
 import { processEnrichmentJob } from "../modules/enrichment/service.ts";
+import { processAuditJob } from "../modules/audit/service.ts";
 import { applyRetention, reconcileStaleJobs, sendTaskReminders } from "../modules/maintenance/tasks.ts";
 import type { MaintenanceJobData } from "../queues/index.ts";
 
@@ -16,6 +17,9 @@ export async function startWorkers(): Promise<Worker[]> {
 
   // enriquecimento: concorrência baixa para não sobrecarregar sites de terceiros
   workers.push(new Worker(QUEUES.enrichment, processEnrichmentJob, { connection: bullConnection(), concurrency: 2, lockDuration: 180_000 }));
+
+  // auditoria: uma por vez (Lighthouse usa um Chromium inteiro)
+  workers.push(new Worker(QUEUES.audit, processAuditJob, { connection: bullConnection(), concurrency: 1, lockDuration: 300_000 }));
 
   const maintenance = new Worker(
     QUEUES.maintenance,

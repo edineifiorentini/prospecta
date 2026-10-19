@@ -187,7 +187,9 @@ services:
     profiles: ["demo"]
     volumes:
       - ./demo-site:/usr/share/nginx/html:ro
-    networks: [backend]
+    networks:
+      backend:
+        aliases: [demo.prospecta.test]   # domínio reservado .test (RFC 2606)
 
 networks:
   backend:

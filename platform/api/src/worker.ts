@@ -33,4 +33,10 @@ const shutdown = async (signal: string) => {
   }
 };
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
+// falhas inesperadas: registra e encerra de forma limpa (o Docker reinicia o worker; jobs ativos são retomados pelo BullMQ)
+process.on("uncaughtException", (err) => {
+  logger.fatal({ err: err.message, stack: err.stack?.split("\n").slice(0, 5).join(" | ") }, "exceção não tratada no worker");
+  void shutdown("uncaughtException");
+});
+process.on("unhandledRejection", (reason) => logger.error({ reason: String(reason).slice(0, 300) }, "promessa rejeitada sem tratamento"));
 process.on("SIGINT", () => void shutdown("SIGINT"));

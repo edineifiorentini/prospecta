@@ -254,6 +254,7 @@ export async function processEnrichmentJob(job: Job<EnrichmentJobData>) {
         },
       }),
     ]);
+    await import("../audit/service.ts").then((m) => m.recomputeDataQuality(company.id)).catch(() => undefined);
     log.info({ status, counts }, "enriquecimento concluído");
   } catch (err) {
     const message = (err as Error).message.slice(0, 500);

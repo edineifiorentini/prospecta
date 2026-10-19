@@ -37,7 +37,10 @@ export const orgRoutes: FastifyPluginAsyncZod = async (app) => {
       const current = readOrgSettings(org.settings);
       let settings = current;
       if (req.body.settings) {
-        const parsed = orgSettingsSchema.safeParse(merge(current as unknown as Record<string, unknown>, req.body.settings));
+        const merged = merge(current as unknown as Record<string, unknown>, req.body.settings);
+        // pesos de pontuação são substituídos por inteiro (permite restaurar os padrões)
+        if ("scoring" in req.body.settings) merged.scoring = req.body.settings.scoring;
+        const parsed = orgSettingsSchema.safeParse(merged);
         if (!parsed.success) throw badRequest("Configurações inválidas.", parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })));
         settings = parsed.data;
       }

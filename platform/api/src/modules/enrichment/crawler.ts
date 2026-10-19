@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { existsSync } from "node:fs";
 import { BasicCrawler, Configuration, log as crawleeLog, LogLevel } from "@crawlee/cheerio";
 import { env } from "../../config/env.ts";
 import { logger } from "../../lib/logger.ts";
@@ -29,6 +30,8 @@ export type CrawlResult = {
   method: "cheerio" | "playwright" | "cheerio+playwright";
   errors: { url: string; message: string }[];
   blockedReason: string | null;
+  /** consulta o robots.txt do site para qualquer URL (respeitado também na checagem de links) */
+  robotsAllows: (url: string) => boolean;
 };
 
 const BOT_UA_TOKEN = "ProspectaBot";
@@ -55,6 +58,7 @@ async function renderWithBrowser(url: string): Promise<{ html: string; finalUrl:
     return null;
   }
   const started = Date.now();
+  if (!existsSync(chromium.executablePath())) return null;
   const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] }).catch((err) => {
     logger.warn({ err: (err as Error).message }, "Chromium indisponível para renderização");
     return null;
@@ -109,6 +113,7 @@ export async function crawlWebsite(startUrl: string, opts: { maxPages?: number; 
     method: "cheerio",
     errors: [],
     blockedReason: null,
+    robotsAllows: () => true,
   };
 
   try {
@@ -158,7 +163,8 @@ export async function crawlWebsite(startUrl: string, opts: { maxPages?: number; 
   const robots = await loadRobots(origin);
   result.robots.found = robots.found;
   result.robots.sitemaps = robots.parser.getSitemaps().slice(0, 5);
-  result.robots.allowedHome = robots.parser.isAllowed(home.finalUrl, BOT_UA_TOKEN) !== false;
+  result.robotsAllows = (u: string) => robots.parser.isAllowed(u, BOT_UA_TOKEN) !== false;
+  result.robots.allowedHome = result.robotsAllows(home.finalUrl);
   if (!result.robots.allowedHome) {
     result.robots.blocked.push(home.finalUrl);
     result.blockedReason = "robots.txt não permite acesso automatizado a este site.";
