@@ -27,6 +27,8 @@ x-api-env: &api-env
   WUZAPI_ADMIN_TOKEN: ${WUZAPI_ADMIN_TOKEN:?defina WUZAPI_ADMIN_TOKEN no .env}
   WUZAPI_WEBHOOK_URL: http://platform-api:4000/api/webhooks/wuzapi
   LOG_LEVEL: ${LOG_LEVEL:-info}
+  # vazio por padrão; só libera destinos internos explicitamente (ex.: demo-site em testes)
+  CRAWLER_ALLOW_HOSTS: ${CRAWLER_ALLOW_HOSTS:-}
 
 services:
   postgres:
@@ -177,6 +179,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
+
+  # site fictício para testes de enriquecimento (opt-in: --profile demo)
+  demo-site:
+    image: nginx:1.30-alpine
+    container_name: prospecta-demo-site
+    profiles: ["demo"]
+    volumes:
+      - ./demo-site:/usr/share/nginx/html:ro
+    networks: [backend]
 
 networks:
   backend:

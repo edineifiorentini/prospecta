@@ -4,6 +4,8 @@ import type { SourceType } from "../../lib/prisma.ts";
 /** Empresa descoberta por uma fonte, já mapeada para o modelo interno (sem inventar campos). */
 export type DiscoveredCompany = {
   name: string;
+  legalName?: string | null;
+  cnpj?: string | null;
   category?: string | null;
   categories?: string[];
   description?: string | null;

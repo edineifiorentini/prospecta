@@ -39,6 +39,8 @@ const lines = {
   WUZAPI_ADMIN_TOKEN: env.WUZAPI_ADMIN_TOKEN,
   WUZAPI_WEBHOOK_URL: "http://host.docker.internal:4000/api/webhooks/wuzapi",
   LOG_LEVEL: "debug",
+  // libera o site de demonstração local (perfil demo) apenas no desenvolvimento
+  CRAWLER_ALLOW_HOSTS: "127.0.0.1",
 };
 
 const out = Object.entries(lines).map(([k, v]) => `${k}=${v ?? ""}`).join("\n") + "\n";

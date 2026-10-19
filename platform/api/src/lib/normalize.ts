@@ -55,6 +55,8 @@ const GENERIC_DOMAINS = new Set([
   "wa.me", "whatsapp.com", "api.whatsapp.com", "linktr.ee", "linktree.com", "google.com", "goo.gl", "g.page",
   "business.site", "sites.google.com", "bit.ly", "ifood.com.br", "booking.com", "tripadvisor.com", "tripadvisor.com.br",
   "doctoralia.com.br", "wixsite.com", "blogspot.com", "wordpress.com", "pinterest.com", "threads.net", "maps.app.goo.gl",
+  "calendly.com", "wa.link", "linkr.bio", "beacons.ai", "bio.link", "taplink.cc", "linkbio.co", "lnk.bio", "agendor.com.br", "booksy.com",
+  "simplybook.me", "zoom.us", "forms.gle", "docs.google.com", "drive.google.com", "ubereats.com", "rappi.com.br", "aiqfome.com", "anota.ai",
 ]);
 
 export function hostOf(url?: string | null): string | null {

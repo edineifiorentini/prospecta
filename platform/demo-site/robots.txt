@@ -1,0 +1,3 @@
+User-agent: *
+Disallow: /area-restrita/
+Sitemap: http://demo-site/sitemap.xml

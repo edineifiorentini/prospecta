@@ -2,10 +2,18 @@ import { Worker } from "bullmq";
 import { bullConnection } from "../lib/redis.ts";
 import { logger } from "../lib/logger.ts";
 import { QUEUES, queue } from "../queues/index.ts";
+import { processSearchJob } from "../modules/search/processor.ts";
+import { processEnrichmentJob } from "../modules/enrichment/service.ts";
 
 /** Registra os processadores de cada fila. Módulos são adicionados a cada fase. */
 export async function startWorkers(): Promise<Worker[]> {
   const workers: Worker[] = [];
+
+  // buscas: uma por vez (protege contra bloqueios nas fontes e respeita limites de uso)
+  workers.push(new Worker(QUEUES.search, processSearchJob, { connection: bullConnection(), concurrency: 1, lockDuration: 120_000 }));
+
+  // enriquecimento: concorrência baixa para não sobrecarregar sites de terceiros
+  workers.push(new Worker(QUEUES.enrichment, processEnrichmentJob, { connection: bullConnection(), concurrency: 2, lockDuration: 180_000 }));
 
   const maintenance = new Worker(
     QUEUES.maintenance,
