@@ -2,6 +2,17 @@
 # Web/API mode on http://localhost:8080. The image has NO built-in auth, so we bind
 # to 127.0.0.1 ONLY — that localhost binding is the security boundary. Do not change
 # the port mapping to 0.0.0.0 / a public interface without putting an auth proxy in front.
+#
+# Prospecta (platform/): this file also includes the prospecting platform (web, API,
+# workers, PostgreSQL, Valkey, WuzAPI). The platform talks to the scraper over the
+# internal Docker network only. Because the scraper API has no authentication, the kit's
+# own web UI on :8080 is now opt-in:  docker compose --profile kit-ui up -d
+
+name: prospecta
+
+include:
+  - path: platform/compose.yaml
+    env_file: .env
 
 services:
   google-maps-scraper:
@@ -27,6 +38,7 @@ services:
     image: nginx:1.27-alpine
     container_name: gmaps-web
     restart: unless-stopped
+    profiles: ["kit-ui"]        # opt-in: exposes the unauthenticated scraper API on localhost
     depends_on:
       - google-maps-scraper
     ports:

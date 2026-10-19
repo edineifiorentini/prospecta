@@ -1,0 +1,1016 @@
+// Prospecta — modelo de dados.
+// Multiempresa: toda entidade de negócio carrega organizationId e toda consulta da API é
+// filtrada pela organização da sessão. Nomes de tabela em snake_case (@@map).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Identidade e acesso ─────────────────────────────
+
+enum Role {
+  OWNER
+  ADMIN
+  MANAGER
+  SALES
+  VIEWER
+}
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  /// Pesos de pontuação, limites de mensagens, retenção etc. (validado pela API)
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  memberships       Membership[]
+  sessions          Session[]
+  companies         Company[]
+  contacts          Contact[]
+  leadSources       LeadSource[]
+  searchJobs        SearchJob[]
+  enrichmentJobs    EnrichmentJob[]
+  digitalAudits     DigitalAudit[]
+  pipelines         Pipeline[]
+  deals             Deal[]
+  tasks             Task[]
+  activities        Activity[]
+  notes             Note[]
+  tags              Tag[]
+  lists             CompanyList[]
+  conversations     Conversation[]
+  messages          Message[]
+  messagingAccounts MessagingAccount[]
+  messageTemplates  MessageTemplate[]
+  consents          ContactConsent[]
+  suppressions      SuppressionEntry[]
+  auditLogs         AuditLog[]
+  scores            CompanyScore[]
+  fieldSources      CompanyFieldSource[]
+
+  @@map("organizations")
+}
+
+model User {
+  id               String    @id @default(uuid()) @db.Uuid
+  email            String    @unique
+  name             String
+  passwordHash     String    @map("password_hash")
+  isActive         Boolean   @default(true) @map("is_active")
+  failedLoginCount Int       @default(0) @map("failed_login_count")
+  lockedUntil      DateTime? @map("locked_until")
+  lastLoginAt      DateTime? @map("last_login_at")
+  passwordChangedAt DateTime @default(now()) @map("password_changed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  memberships     Membership[]
+  sessions        Session[]
+  resetTokens     PasswordResetToken[]
+  ownedCompanies  Company[]            @relation("CompanyOwner")
+  ownedDeals      Deal[]               @relation("DealOwner")
+  assignedTasks   Task[]               @relation("TaskAssignee")
+  createdTasks    Task[]               @relation("TaskCreator")
+  activities      Activity[]
+  notes           Note[]
+  searchJobs      SearchJob[]
+  sentMessages    Message[]            @relation("MessageSender")
+  approvedMessages Message[]           @relation("MessageApprover")
+  consentsRecorded ContactConsent[]
+  auditLogs       AuditLog[]
+
+  @@map("users")
+}
+
+model Membership {
+  id             String       @id @default(uuid()) @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  role           Role         @default(SALES)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("memberships")
+}
+
+model Session {
+  id             String       @id @default(uuid()) @db.Uuid
+  /// SHA-256 do token do cookie (o token em si nunca é armazenado)
+  tokenHash      String       @unique @map("token_hash")
+  csrfToken      String       @map("csrf_token")
+  userId         String       @map("user_id") @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  ip             String?
+  userAgent      String?      @map("user_agent")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  lastSeenAt     DateTime     @default(now()) @map("last_seen_at")
+  expiresAt      DateTime     @map("expires_at")
+  revokedAt      DateTime?    @map("revoked_at")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  ip        String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// ───────────────────────────── Empresas e procedência ─────────────────────────────
+
+enum CompanyStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum EnrichmentStatus {
+  NOT_STARTED
+  QUEUED
+  RUNNING
+  DONE
+  PARTIAL
+  FAILED
+  SKIPPED
+}
+
+/// Situação de uma informação: encontrada, verificada, estimada, indisponível ou inválida
+enum DataStatus {
+  FOUND
+  VERIFIED
+  ESTIMATED
+  UNAVAILABLE
+  INVALID
+}
+
+enum SourceType {
+  GOOGLE_MAPS_SCRAPER
+  OSM_OVERPASS
+  CSV_IMPORT
+  MANUAL
+  WEBSITE
+  BRASILAPI_CNPJ
+  SYSTEM
+}
+
+model Company {
+  id               String           @id @default(uuid()) @db.Uuid
+  organizationId   String           @map("organization_id") @db.Uuid
+  name             String
+  legalName        String?          @map("legal_name")
+  cnpj             String?
+  category         String?
+  categories       String[]         @default([])
+  description      String?
+  website          String?
+  domain           String?
+  primaryPhone     String?          @map("primary_phone")
+  primaryEmail     String?          @map("primary_email")
+  address          String?
+  neighborhood     String?
+  city             String?
+  state            String?
+  postalCode       String?          @map("postal_code")
+  country          String?          @default("BR")
+  latitude         Float?
+  longitude        Float?
+  /// link da ficha pública (Google Maps, OpenStreetMap…)
+  sourceUrl        String?          @map("source_url")
+  googlePlaceId    String?          @map("google_place_id")
+  googleCid        String?          @map("google_cid")
+  osmId            String?          @map("osm_id")
+  rating           Float?
+  reviewCount      Int?             @map("review_count")
+  openingHours     Json?            @map("opening_hours")
+  priceRange       String?          @map("price_range")
+  /// dados públicos adicionais do perfil (fotos, serviços, dono reivindicado…) sem PII
+  publicProfile    Json?            @map("public_profile")
+  status           CompanyStatus    @default(ACTIVE)
+  archivedAt       DateTime?        @map("archived_at")
+  enrichmentStatus EnrichmentStatus @default(NOT_STARTED) @map("enrichment_status")
+  lastEnrichedAt   DateTime?        @map("last_enriched_at")
+  lastAuditedAt    DateTime?        @map("last_audited_at")
+  collectedAt      DateTime         @default(now()) @map("collected_at")
+  lastVerifiedAt   DateTime?        @map("last_verified_at")
+  ownerId          String?          @map("owner_id") @db.Uuid
+  // chaves normalizadas para deduplicação
+  normName         String           @map("norm_name")
+  normPhone        String?          @map("norm_phone")
+  normDomain       String?          @map("norm_domain")
+  normAddress      String?          @map("norm_address")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner          User?                @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  contacts       Contact[]
+  websites       CompanyWebsite[]
+  socialProfiles SocialProfile[]
+  leadSources    LeadSource[]
+  searchResults  SearchResult[]
+  enrichmentJobs EnrichmentJob[]
+  audits         DigitalAudit[]
+  scores         CompanyScore[]
+  fieldSources   CompanyFieldSource[]
+  deals          Deal[]
+  tasks          Task[]
+  activities     Activity[]
+  notes          Note[]
+  tags           CompanyTag[]
+  listItems      CompanyListItem[]
+  conversations  Conversation[]
+  consents       ContactConsent[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, normName])
+  @@index([organizationId, normPhone])
+  @@index([organizationId, normDomain])
+  @@index([organizationId, city])
+  @@index([organizationId, category])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, googlePlaceId])
+  @@index([organizationId, osmId])
+  @@map("companies")
+}
+
+/// Livro-razão de procedência: de onde veio cada campo, quando e com que confiança.
+model CompanyFieldSource {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  companyId      String       @map("company_id") @db.Uuid
+  field          String
+  value          String?
+  source         SourceType
+  sourceRef      String?      @map("source_ref")
+  sourceUrl      String?      @map("source_url")
+  status         DataStatus   @default(FOUND)
+  confidence     Float        @default(0.5)
+  observedAt     DateTime     @default(now()) @map("observed_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, field])
+  @@map("company_field_sources")
+}
+
+enum ContactType {
+  EMAIL
+  PHONE
+  WHATSAPP
+}
+
+model Contact {
+  id                 String       @id @default(uuid()) @db.Uuid
+  organizationId     String       @map("organization_id") @db.Uuid
+  companyId          String       @map("company_id") @db.Uuid
+  type               ContactType
+  value              String
+  normalizedValue    String       @map("normalized_value")
+  label              String?
+  isPrimary          Boolean      @default(false) @map("is_primary")
+  source             SourceType
+  sourceUrl          String?      @map("source_url")
+  status             DataStatus   @default(FOUND)
+  confidence         Float        @default(0.5)
+  /// detalhes da verificação (formato, MX, E.164…) — nunca garante entrega
+  verification       Json?
+  collectedAt        DateTime     @default(now()) @map("collected_at")
+  lastVerifiedAt     DateTime?    @map("last_verified_at")
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company            Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, type, normalizedValue])
+  @@index([organizationId, type, normalizedValue])
+  @@map("contacts")
+}
+
+model CompanyWebsite {
+  id             String    @id @default(uuid()) @db.Uuid
+  companyId      String    @map("company_id") @db.Uuid
+  url            String
+  finalUrl       String?   @map("final_url")
+  domain         String
+  isReachable    Boolean?  @map("is_reachable")
+  httpStatus     Int?      @map("http_status")
+  https          Boolean?
+  responseTimeMs Int?      @map("response_time_ms")
+  robotsAllowed  Boolean?  @map("robots_allowed")
+  title          String?
+  metaDescription String?  @map("meta_description")
+  signals        Json?
+  lastCheckedAt  DateTime? @map("last_checked_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, domain])
+  @@map("company_websites")
+}
+
+enum SocialNetwork {
+  INSTAGRAM
+  FACEBOOK
+  LINKEDIN
+  TIKTOK
+  YOUTUBE
+  PINTEREST
+  X
+  WHATSAPP
+  THREADS
+  OTHER
+}
+
+model SocialProfile {
+  id            String        @id @default(uuid()) @db.Uuid
+  companyId     String        @map("company_id") @db.Uuid
+  network       SocialNetwork
+  url           String
+  handle        String
+  source        SourceType
+  sourceUrl     String?       @map("source_url")
+  status        DataStatus    @default(FOUND)
+  confidence    Float         @default(0.5)
+  /// evidência de vínculo com a empresa (ex.: link no rodapé do site oficial)
+  evidence      String?
+  httpStatus    Int?          @map("http_status")
+  lastCheckedAt DateTime?     @map("last_checked_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, network, handle])
+  @@map("social_profiles")
+}
+
+model LeadSource {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  companyId      String       @map("company_id") @db.Uuid
+  sourceType     SourceType   @map("source_type")
+  sourceRef      String?      @map("source_ref")
+  sourceUrl      String?      @map("source_url")
+  searchJobId    String?      @map("search_job_id") @db.Uuid
+  /// registro bruto recebido da fonte (sujeito à política de retenção)
+  rawData        Json?        @map("raw_data")
+  collectedAt    DateTime     @default(now()) @map("collected_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  searchJob      SearchJob?   @relation(fields: [searchJobId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([organizationId, sourceType])
+  @@map("lead_sources")
+}
+
+model Tag {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  name           String
+  color          String       @default("emerald")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  companies      CompanyTag[]
+
+  @@unique([organizationId, name])
+  @@map("tags")
+}
+
+model CompanyTag {
+  companyId String  @map("company_id") @db.Uuid
+  tagId     String  @map("tag_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, tagId])
+  @@map("company_tags")
+}
+
+model CompanyList {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  name           String
+  description    String?
+  createdById    String?           @map("created_by_id") @db.Uuid
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items          CompanyListItem[]
+
+  @@index([organizationId])
+  @@map("company_lists")
+}
+
+model CompanyListItem {
+  listId    String      @map("list_id") @db.Uuid
+  companyId String      @map("company_id") @db.Uuid
+  addedAt   DateTime    @default(now()) @map("added_at")
+  list      CompanyList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  company   Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([listId, companyId])
+  @@map("company_list_items")
+}
+
+// ───────────────────────────── Pesquisa e enriquecimento ─────────────────────────────
+
+enum JobStatus {
+  QUEUED
+  SUBMITTED
+  RUNNING
+  DOWNLOADING
+  IMPORTING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model SearchJob {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  createdById    String?        @map("created_by_id") @db.Uuid
+  provider       SourceType
+  name           String
+  status         JobStatus      @default(QUEUED)
+  /// parâmetros validados da busca (palavra-chave, local, raio, limite, filtros)
+  params         Json
+  /// fase atual, contadores reais e mensagens de andamento
+  progress       Json           @default("{}")
+  providerJobId  String?        @map("provider_job_id")
+  error          String?
+  attempts       Int            @default(0)
+  resultCount    Int            @default(0) @map("result_count")
+  newCount       Int            @default(0) @map("new_count")
+  duplicateCount Int            @default(0) @map("duplicate_count")
+  cancelRequested Boolean       @default(false) @map("cancel_requested")
+  startedAt      DateTime?      @map("started_at")
+  finishedAt     DateTime?      @map("finished_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  results        SearchResult[]
+  leadSources    LeadSource[]
+
+  @@index([organizationId, createdAt])
+  @@index([status])
+  @@map("search_jobs")
+}
+
+model SearchResult {
+  id          String    @id @default(uuid()) @db.Uuid
+  searchJobId String    @map("search_job_id") @db.Uuid
+  companyId   String?   @map("company_id") @db.Uuid
+  position    Int
+  title       String
+  isNew       Boolean   @default(true) @map("is_new")
+  /// critério que identificou a duplicidade (place_id, domínio, telefone, nome+endereço)
+  matchedBy   String?   @map("matched_by")
+  rawData     Json?     @map("raw_data")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  searchJob   SearchJob @relation(fields: [searchJobId], references: [id], onDelete: Cascade)
+  company     Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([searchJobId, position])
+  @@index([companyId])
+  @@map("search_results")
+}
+
+model EnrichmentJob {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  companyId      String       @map("company_id") @db.Uuid
+  status         JobStatus    @default(QUEUED)
+  method         String?
+  /// páginas visitadas, bloqueios de robots.txt, achados e erros
+  details        Json         @default("{}")
+  error          String?
+  requestedById  String?      @map("requested_by_id") @db.Uuid
+  startedAt      DateTime?    @map("started_at")
+  finishedAt     DateTime?    @map("finished_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([organizationId, status])
+  @@map("enrichment_jobs")
+}
+
+// ───────────────────────────── Auditoria digital e pontuações ─────────────────────────────
+
+enum ScoreKind {
+  DATA_QUALITY
+  GOOGLE_PRESENCE
+  WEBSITE_QUALITY
+  MULTICHANNEL
+  OPPORTUNITY
+}
+
+model DigitalAudit {
+  id                 String          @id @default(uuid()) @db.Uuid
+  organizationId     String          @map("organization_id") @db.Uuid
+  companyId          String          @map("company_id") @db.Uuid
+  status             JobStatus       @default(QUEUED)
+  methodologyVersion String          @map("methodology_version")
+  /// { kind: { score, confidence, evaluated, total, label } }
+  scores             Json            @default("{}")
+  summary            String?
+  positives          Json            @default("[]")
+  problems           Json            @default("[]")
+  recommendations    Json            @default("[]")
+  services           Json            @default("[]")
+  lighthouse         Json?
+  error              String?
+  requestedById      String?         @map("requested_by_id") @db.Uuid
+  startedAt          DateTime?       @map("started_at")
+  finishedAt         DateTime?       @map("finished_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  organization       Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company            Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  evidence           AuditEvidence[]
+
+  @@index([companyId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("digital_audits")
+}
+
+enum EvidenceResult {
+  PASS
+  FAIL
+  WARN
+  INFO
+  NOT_EVALUATED
+}
+
+model AuditEvidence {
+  id         String         @id @default(uuid()) @db.Uuid
+  auditId    String         @map("audit_id") @db.Uuid
+  dimension  ScoreKind
+  criterion  String
+  label      String
+  result     EvidenceResult
+  weight     Float          @default(0)
+  value      Json?
+  detail     String?
+  url        String?
+  observedAt DateTime       @default(now()) @map("observed_at")
+  audit      DigitalAudit   @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@index([auditId, dimension])
+  @@map("audit_evidence")
+}
+
+/// Instantâneo das pontuações (equivale a data_quality_scores, generalizado para os 5 indicadores)
+model CompanyScore {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  companyId      String       @map("company_id") @db.Uuid
+  kind           ScoreKind
+  /// null = "Não avaliado"
+  score          Int?
+  confidence     Float        @default(0)
+  breakdown      Json         @default("{}")
+  auditId        String?      @map("audit_id") @db.Uuid
+  computedAt     DateTime     @default(now()) @map("computed_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, kind])
+  @@index([organizationId, kind, score])
+  @@map("company_scores")
+}
+
+// ───────────────────────────── CRM ─────────────────────────────
+
+model Pipeline {
+  id             String          @id @default(uuid()) @db.Uuid
+  organizationId String          @map("organization_id") @db.Uuid
+  name           String
+  isDefault      Boolean         @default(false) @map("is_default")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stages         PipelineStage[]
+  deals          Deal[]
+
+  @@index([organizationId])
+  @@map("pipelines")
+}
+
+enum StageKind {
+  OPEN
+  WON
+  LOST
+}
+
+model PipelineStage {
+  id         String    @id @default(uuid()) @db.Uuid
+  pipelineId String    @map("pipeline_id") @db.Uuid
+  name       String
+  position   Int
+  color      String    @default("slate")
+  kind       StageKind @default(OPEN)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  pipeline   Pipeline  @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  deals      Deal[]
+
+  @@index([pipelineId, position])
+  @@map("pipeline_stages")
+}
+
+enum DealStatus {
+  OPEN
+  WON
+  LOST
+  ARCHIVED
+}
+
+model Deal {
+  id                String        @id @default(uuid()) @db.Uuid
+  organizationId    String        @map("organization_id") @db.Uuid
+  companyId         String        @map("company_id") @db.Uuid
+  pipelineId        String        @map("pipeline_id") @db.Uuid
+  stageId           String        @map("stage_id") @db.Uuid
+  title             String
+  /// valor estimado em centavos
+  valueCents        Int?          @map("value_cents")
+  currency          String        @default("BRL")
+  status            DealStatus    @default(OPEN)
+  position          Float         @default(0)
+  ownerId           String?       @map("owner_id") @db.Uuid
+  expectedCloseDate DateTime?     @map("expected_close_date")
+  lostReason        String?       @map("lost_reason")
+  closedAt          DateTime?     @map("closed_at")
+  stageChangedAt    DateTime      @default(now()) @map("stage_changed_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+  organization      Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company           Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  pipeline          Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stage             PipelineStage @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  owner             User?         @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  tasks             Task[]
+  activities        Activity[]
+  notes             Note[]
+
+  @@index([organizationId, status])
+  @@index([pipelineId, stageId, position])
+  @@index([companyId])
+  @@map("deals")
+}
+
+enum TaskStatus {
+  OPEN
+  DONE
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Task {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  companyId      String?      @map("company_id") @db.Uuid
+  dealId         String?      @map("deal_id") @db.Uuid
+  title          String
+  description    String?
+  type           String       @default("TODO")
+  status         TaskStatus   @default(OPEN)
+  priority       Priority     @default(MEDIUM)
+  dueAt          DateTime?    @map("due_at")
+  remindAt       DateTime?    @map("remind_at")
+  remindedAt     DateTime?    @map("reminded_at")
+  assigneeId     String?      @map("assignee_id") @db.Uuid
+  createdById    String?      @map("created_by_id") @db.Uuid
+  completedAt    DateTime?    @map("completed_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company        Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  deal           Deal?        @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  assignee       User?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdBy      User?        @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, dueAt])
+  @@index([assigneeId, status])
+  @@index([companyId])
+  @@map("tasks")
+}
+
+enum ActivityType {
+  NOTE
+  CALL
+  MEETING
+  EMAIL
+  WHATSAPP
+  STAGE_CHANGE
+  TASK
+  DEAL
+  IMPORT
+  ENRICHMENT
+  AUDIT
+  FIELD_CHANGE
+  CONSENT
+  SYSTEM
+}
+
+model Activity {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  companyId      String?      @map("company_id") @db.Uuid
+  dealId         String?      @map("deal_id") @db.Uuid
+  userId         String?      @map("user_id") @db.Uuid
+  type           ActivityType
+  title          String
+  body           String?
+  /// duração de ligações/reuniões, resultado, diff de campos etc.
+  metadata       Json         @default("{}")
+  occurredAt     DateTime     @default(now()) @map("occurred_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company        Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  deal           Deal?        @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, occurredAt])
+  @@index([companyId, occurredAt])
+  @@index([dealId])
+  @@map("activities")
+}
+
+model Note {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  companyId      String       @map("company_id") @db.Uuid
+  dealId         String?      @map("deal_id") @db.Uuid
+  authorId       String?      @map("author_id") @db.Uuid
+  body           String
+  pinned         Boolean      @default(false)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  deal           Deal?        @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  author         User?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@map("notes")
+}
+
+// ───────────────────────────── Mensagens e consentimento ─────────────────────────────
+
+enum MessagingProvider {
+  WUZAPI
+  WHATSAPP_CLOUD
+}
+
+enum MessagingAccountStatus {
+  DISCONNECTED
+  CONNECTING
+  QR_PENDING
+  CONNECTED
+  LOGGED_OUT
+  ERROR
+}
+
+model MessagingAccount {
+  id                String                 @id @default(uuid()) @db.Uuid
+  organizationId    String                 @map("organization_id") @db.Uuid
+  provider          MessagingProvider
+  name              String
+  externalUserId    String?                @map("external_user_id")
+  /// token do provedor cifrado com AES-256-GCM (APP_ENCRYPTION_KEY)
+  tokenEncrypted    String?                @map("token_encrypted")
+  /// chave HMAC dos webhooks cifrada
+  hmacKeyEncrypted  String?                @map("hmac_key_encrypted")
+  status            MessagingAccountStatus @default(DISCONNECTED)
+  phoneJid          String?                @map("phone_jid")
+  settings          Json                   @default("{}")
+  lastError         String?                @map("last_error")
+  lastStatusAt      DateTime?              @map("last_status_at")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+  organization      Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversations     Conversation[]
+  webhookEvents     WebhookEvent[]
+
+  @@index([organizationId])
+  @@map("messaging_accounts")
+}
+
+model Conversation {
+  id                 String           @id @default(uuid()) @db.Uuid
+  organizationId     String           @map("organization_id") @db.Uuid
+  messagingAccountId String           @map("messaging_account_id") @db.Uuid
+  companyId          String?          @map("company_id") @db.Uuid
+  channel            String           @default("WHATSAPP")
+  externalChatId     String           @map("external_chat_id")
+  contactPhone       String           @map("contact_phone")
+  contactName        String?          @map("contact_name")
+  lastMessageAt      DateTime?        @map("last_message_at")
+  lastInboundAt      DateTime?        @map("last_inbound_at")
+  unreadCount        Int              @default(0) @map("unread_count")
+  status             String           @default("OPEN")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  messagingAccount   MessagingAccount @relation(fields: [messagingAccountId], references: [id], onDelete: Cascade)
+  company            Company?         @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  messages           Message[]
+
+  @@unique([messagingAccountId, externalChatId])
+  @@index([organizationId, lastMessageAt])
+  @@index([companyId])
+  @@map("conversations")
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  RECEIVED
+  FAILED
+  BLOCKED
+}
+
+model Message {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  conversationId String           @map("conversation_id") @db.Uuid
+  direction      MessageDirection
+  externalId     String?          @map("external_id")
+  /// evita envio duplicado (cliente informa) e eventos repetidos do webhook
+  idempotencyKey String?          @unique @map("idempotency_key")
+  body           String
+  type           String           @default("text")
+  status         MessageStatus
+  error          String?
+  templateId     String?          @map("template_id") @db.Uuid
+  sentById       String?          @map("sent_by_id") @db.Uuid
+  approvedById   String?          @map("approved_by_id") @db.Uuid
+  approvedAt     DateTime?        @map("approved_at")
+  sentAt         DateTime?        @map("sent_at")
+  deliveredAt    DateTime?        @map("delivered_at")
+  readAt         DateTime?        @map("read_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversation   Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  template       MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  sentBy         User?            @relation("MessageSender", fields: [sentById], references: [id], onDelete: SetNull)
+  approvedBy     User?            @relation("MessageApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@unique([conversationId, externalId])
+  @@index([conversationId, createdAt])
+  @@index([organizationId, status])
+  @@map("messages")
+}
+
+model MessageTemplate {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  name           String
+  body           String
+  category       String       @default("ATENDIMENTO")
+  isActive       Boolean      @default(true) @map("is_active")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  messages       Message[]
+
+  @@unique([organizationId, name])
+  @@map("message_templates")
+}
+
+/// Eventos brutos recebidos por webhook (idempotência e rastreabilidade)
+model WebhookEvent {
+  id                 String            @id @default(uuid()) @db.Uuid
+  messagingAccountId String?           @map("messaging_account_id") @db.Uuid
+  provider           MessagingProvider
+  eventType          String            @map("event_type")
+  dedupeKey          String            @unique @map("dedupe_key")
+  signatureValid     Boolean           @map("signature_valid")
+  payload            Json
+  processedAt        DateTime?         @map("processed_at")
+  error              String?
+  receivedAt         DateTime          @default(now()) @map("received_at")
+  messagingAccount   MessagingAccount? @relation(fields: [messagingAccountId], references: [id], onDelete: SetNull)
+
+  @@index([receivedAt])
+  @@map("webhook_events")
+}
+
+enum ConsentStatus {
+  GRANTED
+  REVOKED
+}
+
+enum LegalBasis {
+  CONSENT
+  LEGITIMATE_INTEREST
+  CONTRACT
+  CUSTOMER_INITIATED
+}
+
+model ContactConsent {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  companyId      String?       @map("company_id") @db.Uuid
+  channel        String        @default("WHATSAPP")
+  /// valor normalizado (E.164 para telefone, minúsculas para e-mail)
+  contactValue   String        @map("contact_value")
+  status         ConsentStatus
+  legalBasis     LegalBasis    @map("legal_basis")
+  /// como a autorização foi obtida (ex.: formulário do site, pedido em ligação)
+  source         String
+  evidence       String?
+  grantedAt      DateTime?     @map("granted_at")
+  revokedAt      DateTime?     @map("revoked_at")
+  recordedById   String?       @map("recorded_by_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at")
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company        Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  recordedBy     User?         @relation(fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, channel, contactValue, createdAt])
+  @@map("contact_consents")
+}
+
+model SuppressionEntry {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  channel        String       @default("WHATSAPP")
+  value          String
+  reason         String
+  source         String?
+  createdById    String?      @map("created_by_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, channel, value])
+  @@map("suppression_list")
+}
+
+// ───────────────────────────── Auditoria do sistema e caches ─────────────────────────────
+
+model AuditLog {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String?       @map("organization_id") @db.Uuid
+  userId         String?       @map("user_id") @db.Uuid
+  action         String
+  entityType     String?       @map("entity_type")
+  entityId       String?       @map("entity_id")
+  ip             String?
+  userAgent      String?       @map("user_agent")
+  /// metadados sem segredos (diff de campos, motivo…)
+  metadata       Json          @default("{}")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+model GeocodeCache {
+  id        String   @id @default(uuid()) @db.Uuid
+  query     String   @unique
+  latitude  Float
+  longitude Float
+  label     String
+  raw       Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("geocode_cache")
+}

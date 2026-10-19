@@ -16,3 +16,18 @@ __pycache__/
 # OS / editor noise
 .DS_Store
 Thumbs.db
+
+# Prospecta (platform/)
+node_modules/
+platform/**/dist/
+platform/**/.next/
+platform/**/next-env.d.ts
+platform/**/coverage/
+platform/**/test-results/
+platform/**/playwright-report/
+platform/api/src/generated/
+platform/backups/
+platform/.local/
+.env.dev
+.env.*.local
+*.tsbuildinfo

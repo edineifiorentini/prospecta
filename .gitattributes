@@ -1,0 +1,5 @@
+# Finais de linha LF no repositório (scripts de container quebram com CRLF)
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.jpg binary

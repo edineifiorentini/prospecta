@@ -1,0 +1,14 @@
+# Override APENAS para desenvolvimento no host (API/web rodando com `npm run dev`).
+# Publica serviços internos somente em 127.0.0.1, com portas que não colidem com outros projetos.
+#   docker compose -f docker-compose.yml -f platform/compose.devports.yaml up -d postgres valkey mailpit wuzapi google-maps-scraper
+services:
+  postgres:
+    ports: ["127.0.0.1:5433:5432"]
+  valkey:
+    ports: ["127.0.0.1:6380:6379"]
+  wuzapi:
+    ports: ["127.0.0.1:8081:8080"]
+  google-maps-scraper:
+    ports: ["127.0.0.1:8082:8080"]
+  mailpit:
+    ports: ["127.0.0.1:8025:8025", "127.0.0.1:1025:1025"]

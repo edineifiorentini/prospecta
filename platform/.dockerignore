@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/test-results
+**/playwright-report
+**/*.log
+**/.env*
+api/src/generated
+backups
+.local
