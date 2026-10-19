@@ -4,6 +4,8 @@ import { logger } from "../lib/logger.ts";
 import { QUEUES, queue } from "../queues/index.ts";
 import { processSearchJob } from "../modules/search/processor.ts";
 import { processEnrichmentJob } from "../modules/enrichment/service.ts";
+import { applyRetention, reconcileStaleJobs, sendTaskReminders } from "../modules/maintenance/tasks.ts";
+import type { MaintenanceJobData } from "../queues/index.ts";
 
 /** Registra os processadores de cada fila. Módulos são adicionados a cada fase. */
 export async function startWorkers(): Promise<Worker[]> {
@@ -17,8 +19,17 @@ export async function startWorkers(): Promise<Worker[]> {
 
   const maintenance = new Worker(
     QUEUES.maintenance,
-    async (job) => {
-      logger.debug({ task: job.data.task }, "manutenção");
+    async (job: { data: MaintenanceJobData }) => {
+      switch (job.data.task) {
+        case "reminders":
+          return sendTaskReminders();
+        case "retention":
+          return applyRetention();
+        case "stale-jobs":
+          return reconcileStaleJobs();
+        default:
+          logger.debug({ task: job.data.task }, "tarefa de manutenção sem processador");
+      }
     },
     { connection: bullConnection(), concurrency: 1 },
   );

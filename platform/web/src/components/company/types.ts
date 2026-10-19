@@ -1,0 +1,81 @@
+export type Provenance = { field: string; value: string | null; source: string; sourceUrl: string | null; status: string; confidence: number; observedAt: string };
+
+export type Contact = {
+  id: string;
+  type: "EMAIL" | "PHONE" | "WHATSAPP";
+  value: string;
+  normalizedValue: string;
+  label: string | null;
+  isPrimary: boolean;
+  source: string;
+  sourceUrl: string | null;
+  status: string;
+  confidence: number;
+  verification: Record<string, unknown> | null;
+  collectedAt: string;
+  lastVerifiedAt: string | null;
+};
+
+export type Social = { id: string; network: string; url: string; handle: string; source: string; sourceUrl: string | null; status: string; confidence: number; evidence: string | null; httpStatus: number | null; lastCheckedAt: string | null };
+
+export type Deal = {
+  id: string;
+  title: string;
+  valueCents: number | null;
+  status: string;
+  stageId: string;
+  stage: { id: string; name: string; color: string; kind: string };
+  pipeline: { id: string; name: string };
+  owner: { id: string; name: string } | null;
+  createdAt: string;
+  expectedCloseDate: string | null;
+  lostReason: string | null;
+};
+
+export type CompanyDetail = {
+  id: string;
+  name: string;
+  legalName: string | null;
+  cnpj: string | null;
+  category: string | null;
+  categories: string[];
+  description: string | null;
+  website: string | null;
+  domain: string | null;
+  primaryPhone: string | null;
+  primaryEmail: string | null;
+  address: string | null;
+  neighborhood: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  sourceUrl: string | null;
+  rating: number | null;
+  reviewCount: number | null;
+  openingHours: unknown;
+  priceRange: string | null;
+  publicProfile: Record<string, unknown> | null;
+  status: string;
+  enrichmentStatus: string;
+  lastEnrichedAt: string | null;
+  lastAuditedAt: string | null;
+  collectedAt: string;
+  lastVerifiedAt: string | null;
+  createdAt: string;
+  owner: { id: string; name: string } | null;
+  contacts: Contact[];
+  websites: { id: string; url: string; finalUrl: string | null; domain: string; isReachable: boolean | null; httpStatus: number | null; https: boolean | null; responseTimeMs: number | null; robotsAllowed: boolean | null; title: string | null; metaDescription: string | null; signals: Record<string, unknown> | null; lastCheckedAt: string | null }[];
+  socialProfiles: Social[];
+  leadSources: { id: string; sourceType: string; sourceRef: string | null; sourceUrl: string | null; collectedAt: string; searchJob: { id: string; name: string } | null }[];
+  scores: { kind: string; score: number | null; confidence: number; breakdown: Record<string, unknown>; computedAt: string }[];
+  tags: { tag: { id: string; name: string; color: string } }[];
+  listItems: { list: { id: string; name: string } }[];
+  deals: Deal[];
+  enrichmentJobs: { id: string; status: string; method: string | null; details: Record<string, unknown>; error: string | null; createdAt: string; finishedAt: string | null }[];
+  audits: { id: string; status: string; scores: Record<string, { score: number | null; confidence: number }>; summary: string | null; createdAt: string; finishedAt: string | null }[];
+  provenance: Record<string, Provenance>;
+  searches: { id: string; name: string; createdAt: string; provider: string }[];
+};
