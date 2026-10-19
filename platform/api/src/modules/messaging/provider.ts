@@ -34,6 +34,8 @@ export interface MessagingProvider {
   logout(account: ProviderAccount): Promise<void>;
   /** Envia texto. `clientId` é usado como ID da mensagem para tornar o envio idempotente no provedor. */
   sendText(account: ProviderAccount, phoneE164: string, body: string, clientId: string): Promise<{ externalId: string; sentAt: Date }>;
+  /** Garante que o provedor assina os webhooks com a chave da conta (idempotente). */
+  ensureSignature?(account: ProviderAccount): Promise<void>;
   /** Verifica a assinatura do webhook sobre o corpo bruto. */
   verifySignature(rawBody: Buffer, headers: Record<string, string | string[] | undefined>, account: ProviderAccount): boolean;
   /** Converte o payload do provedor em eventos normalizados. */

@@ -83,6 +83,13 @@ export function companyWhere(organizationId: string, q: Partial<CompanyListQuery
   return { AND: and };
 }
 
+/** `nulls: last` só é aceito em colunas anuláveis (nota, avaliações, cidade). */
+const NULLABLE_SORT = new Set(["rating", "reviewCount", "city"]);
+function companyOrder(sort: CompanyListQuery["sort"], dir: "asc" | "desc"): Prisma.CompanyOrderByWithRelationInput[] {
+  const first = NULLABLE_SORT.has(sort) ? { [sort]: { sort: dir, nulls: "last" } } : { [sort]: dir };
+  return [first as Prisma.CompanyOrderByWithRelationInput, { id: "asc" }];
+}
+
 const LIST_SELECT = {
   id: true, name: true, legalName: true, category: true, website: true, domain: true, primaryPhone: true, primaryEmail: true, address: true, neighborhood: true,
   city: true, state: true, rating: true, reviewCount: true, enrichmentStatus: true, status: true, createdAt: true, updatedAt: true, lastEnrichedAt: true, lastAuditedAt: true,
@@ -115,7 +122,7 @@ export const companyRoutes: FastifyPluginAsyncZod = async (app) => {
     const q = req.query;
     const where = companyWhere(orgId(req), q);
     const [items, total] = await Promise.all([
-      prisma.company.findMany({ where, select: LIST_SELECT, orderBy: [{ [q.sort]: { sort: q.dir, nulls: "last" } }, { id: "asc" }] as Prisma.CompanyOrderByWithRelationInput[], ...paginate(q.page, q.pageSize) }),
+      prisma.company.findMany({ where, select: LIST_SELECT, orderBy: companyOrder(q.sort, q.dir), ...paginate(q.page, q.pageSize) }),
       prisma.company.count({ where }),
     ]);
     return pageResult(items, total, q.page, q.pageSize);

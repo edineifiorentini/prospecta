@@ -5,6 +5,7 @@ import { QUEUES, queue } from "../queues/index.ts";
 import { processSearchJob } from "../modules/search/processor.ts";
 import { processEnrichmentJob } from "../modules/enrichment/service.ts";
 import { processAuditJob } from "../modules/audit/service.ts";
+import { processSendMessage, refreshMessagingStatus } from "../modules/messaging/sender.ts";
 import { applyRetention, reconcileStaleJobs, sendTaskReminders } from "../modules/maintenance/tasks.ts";
 import type { MaintenanceJobData } from "../queues/index.ts";
 
@@ -21,6 +22,9 @@ export async function startWorkers(): Promise<Worker[]> {
   // auditoria: uma por vez (Lighthouse usa um Chromium inteiro)
   workers.push(new Worker(QUEUES.audit, processAuditJob, { connection: bullConnection(), concurrency: 1, lockDuration: 300_000 }));
 
+  // envio de WhatsApp: um por vez e no máximo 20 por minuto (além dos limites por organização)
+  workers.push(new Worker(QUEUES.messaging, processSendMessage, { connection: bullConnection(), concurrency: 1, limiter: { max: 20, duration: 60_000 } }));
+
   const maintenance = new Worker(
     QUEUES.maintenance,
     async (job: { data: MaintenanceJobData }) => {
@@ -31,6 +35,8 @@ export async function startWorkers(): Promise<Worker[]> {
           return applyRetention();
         case "stale-jobs":
           return reconcileStaleJobs();
+        case "messaging-status":
+          return refreshMessagingStatus();
         default:
           logger.debug({ task: job.data.task }, "tarefa de manutenção sem processador");
       }
@@ -43,6 +49,7 @@ export async function startWorkers(): Promise<Worker[]> {
   const m = queue(QUEUES.maintenance);
   await m.upsertJobScheduler("retention-daily", { pattern: "0 3 * * *", tz: "America/Sao_Paulo" }, { name: "maintenance", data: { task: "retention" } });
   await m.upsertJobScheduler("reminders", { every: 5 * 60_000 }, { name: "maintenance", data: { task: "reminders" } });
+  await m.upsertJobScheduler("messaging-status", { every: 60_000 }, { name: "maintenance", data: { task: "messaging-status" } });
   await m.upsertJobScheduler("stale-jobs", { every: 10 * 60_000 }, { name: "maintenance", data: { task: "stale-jobs" } });
 
   for (const w of workers) {

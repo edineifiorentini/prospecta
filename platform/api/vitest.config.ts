@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { integrationEnv } from "./test/integration/env.ts";
 
 export default defineConfig({
   test: {
@@ -27,6 +28,7 @@ export default defineConfig({
           testTimeout: 60_000,
           hookTimeout: 120_000,
           globalSetup: ["test/integration/global-setup.ts"],
+          env: integrationEnv(),
         },
       },
     ],

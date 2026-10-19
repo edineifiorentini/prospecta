@@ -64,6 +64,8 @@ export const wuzapiProvider: MessagingProvider = {
     if (id === undefined) throw new ProviderError("WuzAPI não retornou o ID do usuário criado.");
     // reforça o webhook/eventos pelo endpoint do usuário (formato confirmado na versão 1.0.9)
     await call("/webhook", { method: "POST", token, body: { webhookurl: webhookUrl, events: EVENTS } }).catch(() => undefined);
+    // WuzAPI 1.0.9 só passa a assinar com a chave da instância após /session/hmac/config (ou reinício)
+    await call("/session/hmac/config", { method: "POST", token, body: { hmac_key: hmacKey } });
     return { externalUserId: String(id), token, hmacKey };
   },
 
@@ -71,8 +73,19 @@ export const wuzapiProvider: MessagingProvider = {
     if (a.externalUserId) await call(`/admin/users/${encodeURIComponent(a.externalUserId)}`, { method: "DELETE", admin: true }).catch(() => undefined);
   },
 
+  async ensureSignature(a) {
+    if (!a.hmacKey) return;
+    await call("/session/hmac/config", { method: "POST", token: need(a), body: { hmac_key: a.hmacKey } });
+  },
+
   async connect(a) {
-    await call("/session/connect", { method: "POST", token: need(a), body: { Subscribe: EVENTS, Immediate: true } });
+    await this.ensureSignature?.(a);
+    try {
+      await call("/session/connect", { method: "POST", token: need(a), body: { Subscribe: EVENTS, Immediate: true } });
+    } catch (err) {
+      // já conectado ao servidor do WhatsApp: não é erro (o QR/estado segue disponível)
+      if (!(err instanceof ProviderError && err.status === 409)) throw err;
+    }
   },
 
   async status(a) {
