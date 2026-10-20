@@ -18,6 +18,7 @@ import { api, errorMessage } from "@/lib/api";
 import { fmtDateTime, fmtPhone, fmtRelative } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { useOrg } from "./organization";
+import { RemoveSuppression } from "./privacy";
 import { useSyncedState } from "@/lib/hooks";
 
 type Account = { id: string; name: string; provider: string; status: string; phoneJid: string | null; lastError: string | null; lastStatusAt: string | null };
@@ -246,7 +247,7 @@ function SuppressionAndConsents() {
   const qc = useQueryClient();
   const { can } = useSession();
   const [phone, setPhone] = useState("");
-  const sup = useQuery({ queryKey: ["suppression"], queryFn: () => api<{ id: string; value: string; reason: string; source: string | null; createdAt: string }[]>("/suppression") });
+  const sup = useQuery({ queryKey: ["suppression", "WHATSAPP"], queryFn: () => api<{ id: string; value: string; reason: string; source: string | null; createdAt: string }[]>("/suppression", { query: { channel: "WHATSAPP" } }) });
   const consents = useQuery({ queryKey: ["consents"], queryFn: () => api<{ id: string; contactValue: string; status: string; legalBasis: string; source: string; evidence: string | null; createdAt: string; recordedBy: { name: string } | null; company: { id: string; name: string } | null }[]>("/consents") });
   const add = useMutation({
     mutationFn: () => api("/suppression", { method: "POST", body: { value: phone, reason: "MANUAL", source: "Inclusão manual" } }),
@@ -254,14 +255,6 @@ function SuppressionAndConsents() {
       setPhone("");
       qc.invalidateQueries({ queryKey: ["suppression"] });
     },
-    onError: (e) => toast.error(errorMessage(e)),
-  });
-  const remove = useMutation({
-    mutationFn: (id: string) => {
-      const justification = prompt("Justificativa para retirar da lista de bloqueio (mínimo 10 caracteres):") ?? "";
-      return api(`/suppression/${id}`, { method: "DELETE", body: { justification } });
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["suppression"] }),
     onError: (e) => toast.error(errorMessage(e)),
   });
   return (
@@ -280,13 +273,9 @@ function SuppressionAndConsents() {
             <li key={s.id} className="flex items-center gap-2 px-5 py-2 text-sm">
               <span className="font-medium">{fmtPhone(s.value)}</span>
               <span className="truncate text-xs text-muted-foreground">
-                {s.reason === "OPT_OUT" ? "pediu para sair" : "manual"} · {fmtDateTime(s.createdAt)}
+                {s.reason === "OPT_OUT" ? "pediu para sair" : s.reason === "ERASURE" ? "excluído a pedido do titular" : "manual"} · {fmtDateTime(s.createdAt)}
               </span>
-              {can("privacy:manage") && (
-                <Button variant="ghost" size="icon-xs" className="ml-auto" onClick={() => remove.mutate(s.id)} aria-label="Retirar da lista">
-                  <X />
-                </Button>
-              )}
+              {can("privacy:manage") && <RemoveSuppression id={s.id} />}
             </li>
           ))}
           {!sup.data?.length && <li className="px-5 py-4 text-sm text-muted-foreground">Lista vazia.</li>}

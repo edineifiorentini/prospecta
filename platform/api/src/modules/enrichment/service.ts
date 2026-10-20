@@ -5,6 +5,7 @@ import { fold, hostOf, normName, normalizePhone } from "../../lib/normalize.ts";
 import type { EnrichmentJobData } from "../../queues/index.ts";
 import { nameSimilarity, nameTokens } from "../companies/dedupe.ts";
 import { crawlWebsite, type CrawlResult } from "./crawler.ts";
+import { blockedForCollection } from "../privacy/suppression.ts";
 import { checkMx, checkSocialLink, lookupCnpj } from "./verify.ts";
 
 const AGENCY_CREDIT = /(desenvolvid|criad[oa] por|feito por|ag[eê]ncia|design(ed)? by|powered by|site por|by\s)/i;
@@ -106,6 +107,12 @@ export async function processEnrichmentJob(job: Job<EnrichmentJobData>) {
     });
     src("website.reachable", String(crawl.reachable), crawl.reachable ? "VERIFIED" : "UNAVAILABLE", 0.95, crawl.finalUrl ?? company.website);
     if (!crawl.reachable) inconsistencies.push(crawl.blockedReason ?? "O site informado não respondeu corretamente.");
+
+    // contatos excluídos a pedido do titular não voltam a ser coletados
+    const blocked = await blockedForCollection(company.organizationId, [...[...agg.emails.values()].map((e) => e.value), ...[...agg.phones.values()].map((p) => p.e164), ...[...agg.whatsapp.values()].map((w) => w.e164)]);
+    for (const [k, e] of agg.emails) if (blocked.has(e.value)) agg.emails.delete(k);
+    for (const [k, p] of agg.phones) if (blocked.has(p.e164)) agg.phones.delete(k);
+    for (const [k, w] of agg.whatsapp) if (blocked.has(w.e164)) agg.whatsapp.delete(k);
 
     // e-mails: formato + MX; mesmo domínio do site oficial reforça o vínculo
     const existing = await prisma.contact.findMany({ where: { companyId: company.id } });

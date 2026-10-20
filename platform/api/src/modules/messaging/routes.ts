@@ -334,7 +334,9 @@ export const messagingRoutes: FastifyPluginAsyncZod = async (app) => {
     return { ok: true };
   });
 
-  app.get("/suppression", { schema: { tags: ["consent"] } }, async (req) => prisma.suppressionEntry.findMany({ where: { organizationId: orgId(req) }, orderBy: { createdAt: "desc" }, take: 500 }));
+  app.get("/suppression", { schema: { tags: ["consent"], summary: "Lista de bloqueio (WHATSAPP: não enviar; COLLECTION: não coletar de novo)", querystring: z.object({ channel: z.enum(["WHATSAPP", "COLLECTION"]).optional() }) } }, async (req) =>
+    prisma.suppressionEntry.findMany({ where: { organizationId: orgId(req), ...(req.query.channel ? { channel: req.query.channel } : {}) }, orderBy: { createdAt: "desc" }, take: 500 }),
+  );
 
   app.post("/suppression", { config: { permission: "consent:manage" }, schema: { tags: ["consent"], body: z.object({ value: e164, reason: z.enum(["OPT_OUT", "MANUAL", "COMPLAINT"]).default("MANUAL"), source: z.string().max(200).optional() }) } }, async (req, reply) => {
     const organizationId = orgId(req);

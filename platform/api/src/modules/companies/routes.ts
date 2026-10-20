@@ -1,12 +1,13 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { prisma, type Prisma } from "../../lib/prisma.ts";
-import { badRequest, notFound } from "../../lib/errors.ts";
+import { badRequest, conflict, notFound } from "../../lib/errors.ts";
 import { writeAudit } from "../../lib/audit-log.ts";
 import { toCsv } from "../../lib/csv.ts";
 import { pageResult, paginate } from "../../lib/pagination.ts";
 import { normAddress, normDomain, normName, normalizeEmail, normalizePhone, safeHttpUrl } from "../../lib/normalize.ts";
 import { orgId } from "../../plugins/auth.ts";
+import { blockedForCollection } from "../privacy/suppression.ts";
 import { upsertDiscovered } from "./upsert.ts";
 
 const idParams = z.object({ id: z.uuid() });
@@ -324,6 +325,7 @@ export const companyRoutes: FastifyPluginAsyncZod = async (app) => {
         verification = { ...verification as object, e164Valid: !!p?.valid, numberType: p?.type ?? null };
       }
       if (!normalized) throw badRequest(type === "EMAIL" ? "E-mail inválido." : "Telefone inválido. Inclua o DDD.");
+      if ((await blockedForCollection(organizationId, [normalized])).size) throw conflict("Este contato foi excluído a pedido do titular e está na lista de bloqueio (Configurações → Privacidade).");
       const contact = await prisma.contact.upsert({
         where: { companyId_type_normalizedValue: { companyId: c.id, type, normalizedValue: normalized } },
         create: { organizationId, companyId: c.id, type, value, normalizedValue: normalized, label, source: "MANUAL", status: "FOUND", confidence: 0.85, verification },

@@ -2,6 +2,7 @@ import { prisma, type Prisma, type SourceType, type DataStatus, type SocialNetwo
 import { normAddress, normDomain, normName, normalizeEmail, normalizePhone, uniq } from "../../lib/normalize.ts";
 import type { DiscoveredCompany } from "../sources/types.ts";
 import { confirmsDuplicate, type DedupeCandidate } from "./dedupe.ts";
+import { blockedForCollection } from "../privacy/suppression.ts";
 import { parseSocialUrl } from "../enrichment/social.ts";
 
 export const SOURCE_CONFIDENCE: Record<SourceType, number> = {
@@ -89,8 +90,12 @@ const SCALAR_FIELDS = [
 /** Grava uma empresa descoberta: cria ou complementa a existente, sem sobrescrever dados já presentes. */
 export async function upsertDiscovered(ctx: UpsertContext, rec: DiscoveredCompany): Promise<UpsertResult> {
   const conf = SOURCE_CONFIDENCE[ctx.source];
-  const phones = uniq(rec.phones.map((p) => normalizePhone(p)).filter((p): p is NonNullable<typeof p> => !!p).map((p) => p.e164));
-  const emails = uniq(rec.emails.map(normalizeEmail).filter((e): e is string => !!e));
+  const allPhones = uniq(rec.phones.map((p) => normalizePhone(p)).filter((p): p is NonNullable<typeof p> => !!p).map((p) => p.e164));
+  const allEmails = uniq(rec.emails.map(normalizeEmail).filter((e): e is string => !!e));
+  // contatos excluídos a pedido do titular não voltam a ser coletados
+  const blocked = await blockedForCollection(ctx.organizationId, [...allPhones, ...allEmails]);
+  const phones = allPhones.filter((p) => !blocked.has(p));
+  const emails = allEmails.filter((e) => !blocked.has(e));
   let cityEstimated = false;
   if (!rec.city && ctx.fallbackCity) {
     rec = { ...rec, city: ctx.fallbackCity, state: rec.state ?? ctx.fallbackState ?? null };

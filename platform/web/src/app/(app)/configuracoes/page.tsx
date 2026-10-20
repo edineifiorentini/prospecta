@@ -20,16 +20,18 @@ function SettingsTabs() {
   const [tab, setTab] = useState(params.get("tab") ?? "conta");
   return (
     <Tabs value={tab} onValueChange={setTab}>
-      <TabsList className="mb-6 flex-wrap">
-        <TabsTrigger value="conta">Conta e segurança</TabsTrigger>
-        <TabsTrigger value="usuarios">Usuários</TabsTrigger>
-        <TabsTrigger value="organizacao">Organização</TabsTrigger>
-        <TabsTrigger value="pontuacao">Pontuação</TabsTrigger>
-        <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
-        {can("privacy:manage") && <TabsTrigger value="privacidade">Privacidade (LGPD)</TabsTrigger>}
-        {can("auditlog:read") && <TabsTrigger value="auditoria">Trilha de auditoria</TabsTrigger>}
-        <TabsTrigger value="sistema">Sistema</TabsTrigger>
-      </TabsList>
+      <div className="mb-6 overflow-x-auto pb-1">
+        <TabsList className="w-max">
+          <TabsTrigger value="conta">Conta e segurança</TabsTrigger>
+          <TabsTrigger value="usuarios">Usuários</TabsTrigger>
+          <TabsTrigger value="organizacao">Organização</TabsTrigger>
+          <TabsTrigger value="pontuacao">Pontuação</TabsTrigger>
+          <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+          {can("privacy:manage") && <TabsTrigger value="privacidade">Privacidade (LGPD)</TabsTrigger>}
+          {can("auditlog:read") && <TabsTrigger value="auditoria">Trilha de auditoria</TabsTrigger>}
+          <TabsTrigger value="sistema">Sistema</TabsTrigger>
+        </TabsList>
+      </div>
       <TabsContent value="conta">
         <AccountSettings />
       </TabsContent>
