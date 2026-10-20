@@ -83,7 +83,11 @@ export type ProgressUpdate = {
   duplicates?: number;
   filteredOut?: number;
   percent?: number;
+  /** centro e raio usados na busca (para desenhar no mapa) */
+  area?: SearchArea;
 };
+
+export type SearchArea = { lat: number; lon: number; label: string; radiusKm: number };
 
 export type AdapterContext = {
   searchJobId: string;

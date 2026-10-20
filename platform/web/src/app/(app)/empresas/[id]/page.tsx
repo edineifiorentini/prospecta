@@ -28,6 +28,7 @@ import { TaskComposer, TaskList } from "@/components/tasks/task-list";
 import type { CompanyDetail } from "@/components/company/types";
 import { api, errorMessage } from "@/lib/api";
 import { fmtDateTime, fmtMoney, fmtNumber, fmtRating } from "@/lib/format";
+import { LeadMap } from "@/components/map/lead-map";
 import { useSession } from "@/lib/session";
 
 const TABS = ["visao-geral", "atividades", "tarefas", "anotacoes", "negociacoes", "auditoria", "conversas"] as const;
@@ -229,6 +230,28 @@ export default function CompanyPage() {
                 </span>
               </div>
             </SectionCard>
+            {c.latitude != null && c.longitude != null && (
+              <SectionCard
+                title="Localização"
+                description="Ponto registrado pela fonte de dados"
+                className="overflow-hidden"
+                bodyClassName="p-0"
+                actions={
+                  <Button variant="ghost" size="sm" asChild>
+                    <a href={`https://www.google.com/maps/search/?api=1&query=${c.latitude},${c.longitude}`} target="_blank" rel="noopener noreferrer">
+                      Abrir no Google Maps <ExternalLink />
+                    </a>
+                  </Button>
+                }
+              >
+                <LeadMap
+                  area={null}
+                  points={[{ id: c.id, lat: c.latitude, lon: c.longitude, name: c.name, category: c.category, rating: c.rating, reviewCount: c.reviewCount, phone: c.primaryPhone }]}
+                  className="h-56 rounded-none border-0"
+                  label={`Mapa com a localização de ${c.name}`}
+                />
+              </SectionCard>
+            )}
             <ContactsCard companyId={c.id} contacts={c.contacts} canEdit={canEdit} />
             <SocialCard socials={c.socialProfiles} />
             <WebsiteCard company={c} />

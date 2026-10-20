@@ -20,6 +20,7 @@ import { Field } from "@/components/form-field";
 import { TriStateFilter } from "@/components/tri-state";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import type { Source } from "@/lib/types";
+import type { MapArea } from "@/components/map/lead-map";
 import { cn } from "@/lib/utils";
 
 const tri = z.enum(["any", "with", "without"]);
@@ -56,7 +57,10 @@ type Values = z.input<typeof schema>;
 
 const LIMITS = [10, 20, 40, 60, 100, 200, 300, 500];
 
-export function SearchForm() {
+/** O que o mapa da página mostra enquanto o formulário é preenchido. */
+export type AreaPreview = { area: MapArea | null; message: string | null };
+
+export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPreview) => void }) {
   const router = useRouter();
   const qc = useQueryClient();
   const [showFilters, setShowFilters] = useState(false);
@@ -82,7 +86,7 @@ export function SearchForm() {
     },
   });
   const provider = useWatch({ control: form.control, name: "provider" });
-  const [city, state, neighborhood, country] = useWatch({ control: form.control, name: ["city", "state", "neighborhood", "country"] });
+  const [city, state, neighborhood, country, radiusKm] = useWatch({ control: form.control, name: ["city", "state", "neighborhood", "country", "radiusKm"] });
 
   // pré-visualização da localização (geocodificação no servidor, com cache)
   // o resultado guarda a chave consultada; ao mudar o local, o anterior deixa de ser exibido
@@ -110,6 +114,14 @@ export function SearchForm() {
   }, [geoKey, city, state, neighborhood, country]);
   const geo = geoResult?.key === geoKey ? (geoResult.geo ?? null) : null;
   const geoWarning = geoResult?.key === geoKey ? (geoResult.error ?? null) : null;
+
+  // informa o mapa da página: pino no local e círculo do raio, atualizados enquanto a pessoa digita
+  useEffect(() => {
+    onAreaChange?.({
+      area: geo ? { lat: geo.latitude, lon: geo.longitude, label: geo.label, radiusKm } : null,
+      message: !geoKey ? "Informe a cidade para ver a área da busca no mapa." : geoWarning ?? (geo ? null : "Localizando no mapa…"),
+    });
+  }, [onAreaChange, geo, geoKey, geoWarning, radiusKm]);
 
   const create = useMutation({
     mutationFn: (v: z.output<typeof schema>) => {

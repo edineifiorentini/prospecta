@@ -17,6 +17,7 @@ import { JobProgress, JobStatusBadge } from "@/components/search/job-progress";
 import { AddToListDialog } from "@/components/companies/add-to-list-dialog";
 import { BulkCompanyActions } from "@/components/companies/bulk-actions";
 import { CompanyNameCell, ContactCell, EnrichmentBadge, RatingCell } from "@/components/companies/company-cells";
+import { SearchResultsMap } from "@/components/map/search-results-map";
 import { api, downloadUrl, errorMessage } from "@/lib/api";
 import { fmtDateTime } from "@/lib/format";
 import { SOURCE_LABEL } from "@/lib/labels";
@@ -121,6 +122,7 @@ export default function SearchResultsPage() {
           )}
         </SectionCard>
       )}
+      {j && <SearchResultsMap searchId={id} active={active} />}
 
       <DataTable
         columns={columns}

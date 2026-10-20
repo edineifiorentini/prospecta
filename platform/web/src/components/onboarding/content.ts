@@ -194,7 +194,7 @@ export const TOUR: TourStep[] = [
     route: "/buscar",
     targets: ["search-form"],
     title: "Encontrar empresas",
-    body: "Informe o tipo de negócio e a cidade. O OpenStreetMap é gratuito e liberado; o Google Maps é opcional e pode bloquear seu IP temporariamente. Também dá para importar uma planilha CSV.",
+    body: "Informe o tipo de negócio e a cidade; o mapa mostra o local e o raio da busca. O OpenStreetMap é gratuito e liberado; o Google Maps é opcional e pode bloquear seu IP temporariamente. Também dá para importar uma planilha CSV.",
   },
   { route: "/buscar", targets: ["search-jobs"], title: "Andamento das buscas", body: "Cada busca roda em segundo plano. Acompanhe aqui e abra os resultados; empresas repetidas são unificadas automaticamente." },
   {

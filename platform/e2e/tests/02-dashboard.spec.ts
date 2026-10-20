@@ -37,3 +37,13 @@ test("relatórios: negociações em CSV e resumo em PDF", async ({ page }) => {
   expect(statSync(path).size).toBeGreaterThan(5_000);
   expect(readFileSync(path).subarray(0, 5).toString()).toBe("%PDF-");
 });
+
+test("mapa da busca aparece e pede a cidade", async ({ page }) => {
+  await page.goto("/buscar");
+  const map = page.getByRole("region", { name: "Mapa com o local e o raio da busca" });
+  await expect(map).toBeVisible();
+  await expect(page.getByText("Informe a cidade para ver a área da busca no mapa.")).toBeVisible();
+  // controles do Leaflet e atribuição do OpenStreetMap
+  await expect(page.getByRole("button", { name: "Aproximar" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "OpenStreetMap" })).toBeVisible();
+});

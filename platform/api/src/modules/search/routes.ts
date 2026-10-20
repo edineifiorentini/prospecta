@@ -9,7 +9,7 @@ import { toCsv } from "../../lib/csv.ts";
 import { pageQuery, pageResult, paginate } from "../../lib/pagination.ts";
 import { enqueueSearch } from "../../queues/index.ts";
 import { orgId } from "../../plugins/auth.ts";
-import { geocode } from "../geo/geocode.ts";
+import { geocode, tryGeocode } from "../geo/geocode.ts";
 import { readOrgSettings } from "../orgs/settings.ts";
 import { searchFiltersSchema, searchParamsSchema } from "../sources/types.ts";
 import { detectMapping, mapCsvRow, mappingSchema, parseCsv } from "../imports/csv-import.ts";
@@ -170,6 +170,43 @@ export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
       prisma.searchResult.count({ where: { searchJobId: job.id, matchedBy: "filtered_out" } }),
     ]);
     return { ...pageResult(rows.map(({ rawData: _r, ...r }) => r), total, q.page, q.pageSize), filteredOut };
+  });
+
+  app.get("/searches/:id/map", { schema: { tags: ["search"], summary: "Centro, raio e empresas com coordenadas para o mapa da busca", params: idParams } }, async (req) => {
+    const job = await loadJob(orgId(req), req.params.id);
+    // importações CSV têm outros parâmetros: sem cidade, o mapa mostra só os pontos
+    const parsed = searchParamsSchema.partial().safeParse(job.params);
+    const params = parsed.success ? parsed.data : {};
+    const progress = (job.progress ?? {}) as { area?: { lat: number; lon: number; label: string; radiusKm: number } };
+    // buscas antigas não guardavam a área: localiza de novo (normalmente vem do cache)
+    let area = progress.area ?? null;
+    if (!area && params.city) {
+      const geo = await tryGeocode({ country: params.country, state: params.state, city: params.city, neighborhood: params.neighborhood });
+      if (geo.place) area = { lat: geo.place.latitude, lon: geo.place.longitude, label: geo.place.label, radiusKm: params.radiusKm ?? 5 };
+    }
+    const rows = await prisma.searchResult.findMany({
+      where: { searchJobId: job.id, companyId: { not: null } },
+      orderBy: { position: "asc" },
+      take: 2000,
+      select: {
+        company: {
+          select: { id: true, name: true, category: true, rating: true, reviewCount: true, primaryPhone: true, latitude: true, longitude: true, _count: { select: { deals: true } } },
+        },
+      },
+    });
+    const seen = new Set<string>();
+    const points: { id: string; name: string; category: string | null; rating: number | null; reviewCount: number | null; phone: string | null; lat: number; lon: number; inCrm: boolean }[] = [];
+    let withoutLocation = 0;
+    for (const { company: c } of rows) {
+      if (!c || seen.has(c.id)) continue;
+      seen.add(c.id);
+      if (c.latitude == null || c.longitude == null) {
+        withoutLocation++;
+        continue;
+      }
+      points.push({ id: c.id, name: c.name, category: c.category, rating: c.rating, reviewCount: c.reviewCount, phone: c.primaryPhone, lat: c.latitude, lon: c.longitude, inCrm: c._count.deals > 0 });
+    }
+    return { area, points, withoutLocation };
   });
 
   app.get("/searches/:id/export.csv", { config: { permission: "export:run" }, schema: { tags: ["search"], summary: "Exporta os resultados salvos da busca em CSV", params: idParams } }, async (req, reply) => {

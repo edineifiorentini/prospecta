@@ -96,6 +96,12 @@ describe("Google Maps Scraper (CSV do motor gosom)", () => {
     expect(c?.publicProfile?.photoCount).toBe(2);
     expect(c?.raw).not.toHaveProperty("user_reviews");
   });
+
+  it("sem avaliações, a nota 0 do motor vira ausência de nota", () => {
+    const c = mapGmapsRow({ title: "Escritório Novo", review_rating: "0", review_count: "0" });
+    expect(c?.rating).toBeNull();
+    expect(c?.reviewCount).toBe(0);
+  });
 });
 
 describe("filtros combináveis", () => {

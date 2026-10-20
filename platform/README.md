@@ -72,6 +72,7 @@ No primeiro acesso, um **tour guiado** apresenta as telas principais. O roteiro 
    - Informe palavra-chave, cidade, bairro, raio e limite.
    - Fontes: OpenStreetMap, ou o Google Maps Scraper (opcional, sujeito a bloqueio de IP pelo Google e contrário aos Termos do Google).
    - Também dá para importar uma planilha CSV.
+   - Como no kit original, o mapa mostra o local (pino azul) e o raio (círculo) enquanto você preenche a busca; nos resultados, cada empresa vira um pino (vermelho; verde se já está no CRM; cinza se ficou fora do raio). A ficha da empresa também mostra o ponto no mapa. Os mapas são do OpenStreetMap, sem chave nem custo.
    - O andamento aparece em tempo real e os resultados são deduplicados.
 2. **Empresas**
    - Lista com filtros (sem site, sem telefone, nota, avaliações, cidade, segmento, pontuações), ações em lote, listas e exportação CSV.
@@ -130,9 +131,9 @@ Com `--apply --yes`, **substitui** o banco atual. Antes ele salva um backup de s
 
 | Suíte | Como rodar | Requisitos |
 |---|---|---|
-| Unitários (78) | `cd platform/api && npm run test:unit` | nenhum |
-| Integração (41) | `cd platform/api && npm run test:integration` | Postgres e Valkey publicados (modo desenvolvimento) e `platform/.env.dev`; usa o banco separado `prospecta_test` |
-| Ponta a ponta (23) | `cd platform/e2e && npm install && npx playwright test` | pilha rodando em http://localhost:3000; usa o Edge instalado (`E2E_CHANNEL=chrome` para o Chrome) |
+| Unitários (81) | `cd platform/api && npm run test:unit` | nenhum |
+| Integração (47) | `cd platform/api && npm run test:integration` | Postgres e Valkey publicados (modo desenvolvimento) e `platform/.env.dev`; usa o banco separado `prospecta_test` |
+| Ponta a ponta (24) | `cd platform/e2e && npm install && npx playwright test` | pilha rodando em http://localhost:3000; usa o Edge instalado (`E2E_CHANNEL=chrome` para o Chrome) |
 
 Os testes E2E criam um usuário próprio (`e2e@prospecta.local`) com senha temporária e registros com o prefixo `[E2E]`; ao final, apagam esses registros e o próprio usuário.
 

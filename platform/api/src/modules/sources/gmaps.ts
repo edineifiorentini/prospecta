@@ -66,7 +66,8 @@ export function mapGmapsRow(row: Record<string, string>): DiscoveredCompany | nu
     sourceUrl: safeHttpUrl(row.link),
     googlePlaceId: row.place_id?.trim() || null,
     googleCid: row.cid?.trim() || null,
-    rating: num(row.review_rating),
+    // sem avaliações o motor devolve nota 0: isso é ausência de nota, não nota zero
+    rating: num(row.review_count) ? num(row.review_rating) : null,
     reviewCount: num(row.review_count),
     openingHours: json(row.open_hours),
     priceRange: row.price_range?.trim() || null,
@@ -113,6 +114,7 @@ export const gmapsAdapter: DiscoveryAdapter = {
     const geo = await tryGeocode({ country: p.country, state: p.state, city: p.city, neighborhood: p.neighborhood });
     if (!geo.place) await ctx.progress({ phase: "geocoding", message: `${geo.problem.message} A busca segue pelo nome do local, como no kit original.` });
     const place = geo.place;
+    if (place) await ctx.progress({ phase: "geocoding", message: `Local: ${place.label}`, area: { lat: place.latitude, lon: place.longitude, label: place.label, radiusKm: p.radiusKm } });
     const where = [p.neighborhood, p.city, p.state].filter(Boolean).join(", ");
     const joiner = p.lang === "en" ? "in" : p.lang === "es" ? "en" : "em";
     const keyword = `${p.nameContains ? `${p.keyword} ${p.nameContains}` : p.keyword} ${joiner} ${where}`;

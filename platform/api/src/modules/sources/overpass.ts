@@ -189,6 +189,7 @@ export const overpassAdapter: DiscoveryAdapter = {
     await ctx.progress({ phase: "geocoding", message: "Localizando a área de busca…" });
     const location = { country: p.country, state: p.state, city: p.city, neighborhood: p.neighborhood };
     const geo = await tryGeocode(location);
+    if (geo.place) await ctx.progress({ phase: "geocoding", message: `Local: ${geo.place.label}`, area: { lat: geo.place.latitude, lon: geo.place.longitude, label: geo.place.label, radiusKm: p.radiusKm } });
     // sem serviço de mapas, a área vem do limite do município no próprio OpenStreetMap
     const { query, plan } = geo.place
       ? buildOverpassQuery(p.keyword, geo.place.latitude, geo.place.longitude, p.radiusKm * 1000, p.limit, p.nameContains)
