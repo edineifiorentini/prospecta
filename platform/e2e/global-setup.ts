@@ -17,6 +17,6 @@ export default async function globalSetup() {
   const tempPassword = r.stdout.match(/Senha temporária: (\S+)/)?.[1];
   if (r.status !== 0 || !tempPassword) throw new Error(`Não foi possível criar o usuário de teste: ${r.stderr || r.stdout}`);
   mkdirSync(dirname(STATE), { recursive: true });
-  // a senha definitiva só existe durante a execução; o usuário é desativado no final
+  // a senha definitiva só existe durante a execução; o usuário é apagado no final
   writeFileSync(STATE, JSON.stringify({ email: E2E_EMAIL, tempPassword, password: `E2e-${randomBytes(9).toString("base64url")}`, mode: docker ? "docker" : "dev" }), { mode: 0o600 });
 }

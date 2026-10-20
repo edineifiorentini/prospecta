@@ -132,7 +132,7 @@ Com `--apply --yes`, **substitui** o banco atual. Antes ele salva um backup de s
 | Integração (37) | `cd platform/api && npm run test:integration` | Postgres e Valkey publicados (modo desenvolvimento) e `platform/.env.dev`; usa o banco separado `prospecta_test` |
 | Ponta a ponta (19) | `cd platform/e2e && npm install && npx playwright test` | pilha rodando em http://localhost:3000; usa o Edge instalado (`E2E_CHANNEL=chrome` para o Chrome) |
 
-Os testes E2E criam um usuário próprio (`e2e@prospecta.local`) com senha temporária e registros com o prefixo `[E2E]`; ao final, apagam esses registros e desativam o usuário.
+Os testes E2E criam um usuário próprio (`e2e@prospecta.local`) com senha temporária e registros com o prefixo `[E2E]`; ao final, apagam esses registros e o próprio usuário.
 
 ## Modo desenvolvimento
 
