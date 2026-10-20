@@ -6,7 +6,7 @@ import { processSearchJob } from "../modules/search/processor.ts";
 import { processEnrichmentJob } from "../modules/enrichment/service.ts";
 import { processAuditJob } from "../modules/audit/service.ts";
 import { processSendMessage, refreshMessagingStatus } from "../modules/messaging/sender.ts";
-import { applyRetention, reconcileStaleJobs, sendTaskReminders } from "../modules/maintenance/tasks.ts";
+import { applyRetention, backfillDataQuality, reconcileStaleJobs, sendTaskReminders } from "../modules/maintenance/tasks.ts";
 import type { MaintenanceJobData } from "../queues/index.ts";
 
 /** Registra os processadores de cada fila. Módulos são adicionados a cada fase. */
@@ -37,6 +37,8 @@ export async function startWorkers(): Promise<Worker[]> {
           return reconcileStaleJobs();
         case "messaging-status":
           return refreshMessagingStatus();
+        case "data-quality":
+          return backfillDataQuality();
         default:
           logger.debug({ task: job.data.task }, "tarefa de manutenção sem processador");
       }
@@ -51,6 +53,7 @@ export async function startWorkers(): Promise<Worker[]> {
   await m.upsertJobScheduler("reminders", { every: 5 * 60_000 }, { name: "maintenance", data: { task: "reminders" } });
   await m.upsertJobScheduler("messaging-status", { every: 60_000 }, { name: "maintenance", data: { task: "messaging-status" } });
   await m.upsertJobScheduler("stale-jobs", { every: 10 * 60_000 }, { name: "maintenance", data: { task: "stale-jobs" } });
+  await m.upsertJobScheduler("data-quality", { every: 10 * 60_000 }, { name: "maintenance", data: { task: "data-quality" } });
 
   for (const w of workers) {
     w.on("failed", (job, err) => logger.error({ queue: w.name, jobId: job?.id, err: err.message }, "job falhou"));

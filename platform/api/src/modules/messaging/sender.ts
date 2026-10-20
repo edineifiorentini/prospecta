@@ -2,7 +2,7 @@ import type { Job } from "bullmq";
 import { prisma } from "../../lib/prisma.ts";
 import { logger } from "../../lib/logger.ts";
 import type { MessagingJobData } from "../../queues/index.ts";
-import { providerFor, setAccountStatus, toProviderAccount } from "./accounts.ts";
+import { liveStatus, providerFor, setAccountStatus, toProviderAccount } from "./accounts.ts";
 import { decideSend } from "./policy.ts";
 import { ProviderError } from "./provider.ts";
 
@@ -42,7 +42,7 @@ export async function refreshMessagingStatus() {
   const accounts = await prisma.messagingAccount.findMany({ where: { provider: "WUZAPI", tokenEncrypted: { not: null } } });
   for (const a of accounts) {
     try {
-      const s = await providerFor(a.provider).status(toProviderAccount(a));
+      const s = await liveStatus(a);
       if (s.status !== a.status) await setAccountStatus(a.id, s.status, { phoneJid: s.jid ?? a.phoneJid, lastError: s.status === "DISCONNECTED" && a.status === "CONNECTED" ? "Conexão perdida; use Reconectar." : undefined });
     } catch (err) {
       if (a.status !== "ERROR") await setAccountStatus(a.id, "ERROR", { lastError: (err as Error).message.slice(0, 200) });

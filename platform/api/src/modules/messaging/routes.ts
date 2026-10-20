@@ -9,7 +9,7 @@ import { normalizePhone } from "../../lib/normalize.ts";
 import { enqueueMessage } from "../../queues/index.ts";
 import { orgId } from "../../plugins/auth.ts";
 import { can } from "../auth/rbac.ts";
-import { providerFor, publicAccount, setAccountStatus, toProviderAccount } from "./accounts.ts";
+import { providerFor, publicAccount, setAccountStatus, toProviderAccount, liveStatus } from "./accounts.ts";
 import { decideSend, renderTemplate } from "./policy.ts";
 import { ProviderError } from "./provider.ts";
 import { ensureConversation } from "./inbound.ts";
@@ -92,7 +92,7 @@ export const messagingRoutes: FastifyPluginAsyncZod = async (app) => {
 
   app.get("/messaging/accounts/:id/status", { schema: { tags: ["messaging"], params: idParams } }, async (req) => {
     const a = await loadAccount(orgId(req), req.params.id);
-    const s = await wrap(() => providerFor(a.provider).status(toProviderAccount(a)));
+    const s = await wrap(() => liveStatus(a));
     if (s.status !== a.status || (s.jid && s.jid !== a.phoneJid)) await setAccountStatus(a.id, s.status, { phoneJid: s.jid ?? a.phoneJid });
     return { ...publicAccount({ ...a, status: s.status, phoneJid: s.jid ?? a.phoneJid }) };
   });

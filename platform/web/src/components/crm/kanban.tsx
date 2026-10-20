@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   DndContext,
@@ -21,6 +21,8 @@ import { CalendarClock, GripVertical } from "lucide-react";
 import { ScorePill } from "@/components/score-pill";
 import { fmtDate, fmtMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { STAGE_DOT } from "@/lib/labels";
+import { useNow, useSyncedState } from "@/lib/hooks";
 
 export type KanbanStage = { id: string; name: string; color: string; kind: "OPEN" | "WON" | "LOST"; position: number };
 export type KanbanDeal = {
@@ -35,15 +37,12 @@ export type KanbanDeal = {
   tasks: { id: string; title: string; dueAt: string | null }[];
 };
 
-const STAGE_DOT: Record<string, string> = {
-  slate: "bg-slate-400", sky: "bg-sky-500", teal: "bg-teal-500", emerald: "bg-emerald-500", lime: "bg-lime-500", amber: "bg-amber-500",
-  orange: "bg-orange-500", violet: "bg-violet-500", green: "bg-green-600", rose: "bg-rose-500", blue: "bg-blue-500", pink: "bg-pink-500",
-};
 
 function DealCard({ deal, overlay }: { deal: KanbanDeal; overlay?: boolean }) {
   const opp = deal.company.scores.find((s) => s.kind === "OPPORTUNITY");
   const next = deal.tasks[0];
-  const overdue = next?.dueAt && new Date(next.dueAt).getTime() < Date.now();
+  const now = useNow();
+  const overdue = next?.dueAt && new Date(next.dueAt).getTime() < now;
   return (
     <div className={cn("rounded-lg border bg-card p-3 text-left shadow-[0_1px_2px_rgb(0_0_0/0.04)]", overlay && "rotate-1 shadow-[var(--shadow-float)]")}>
       <div className="flex items-start gap-2">
@@ -103,7 +102,6 @@ function Column({ stage, deals }: { stage: KanbanStage; deals: KanbanDeal[] }) {
 
 /** Kanban com arrastar e soltar (mouse, toque e teclado). Persiste etapa e posição ao soltar. */
 export function KanbanBoard({ stages, deals, onMove }: { stages: KanbanStage[]; deals: KanbanDeal[]; onMove: (dealId: string, stageId: string, position: number, toStage: KanbanStage) => void }) {
-  const [items, setItems] = useState<Record<string, KanbanDeal[]>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
@@ -113,7 +111,8 @@ export function KanbanBoard({ stages, deals, onMove }: { stages: KanbanStage[]; 
     for (const k of Object.keys(g)) g[k]!.sort((a, b) => a.position - b.position);
     return g;
   }, [stages, deals]);
-  useEffect(() => setItems(grouped), [grouped]);
+  // estado otimista durante o arraste; volta a refletir o servidor quando os dados mudam
+  const [items, setItems] = useSyncedState(grouped, (g) => g);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const findStage = (id: string) => (id.startsWith("stage:") ? id.slice(6) : Object.keys(items).find((k) => items[k]!.some((d) => d.id === id)));

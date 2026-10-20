@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -18,6 +18,7 @@ import { api, errorMessage } from "@/lib/api";
 import { fmtDateTime, fmtPhone, fmtRelative } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { useOrg } from "./organization";
+import { useSyncedState } from "@/lib/hooks";
 
 type Account = { id: string; name: string; provider: string; status: string; phoneJid: string | null; lastError: string | null; lastStatusAt: string | null };
 const STATUS: Record<string, { label: string; tone: "success" | "warning" | "danger" | "neutral" | "info" }> = {
@@ -34,13 +35,16 @@ function AccountCard({ account }: { account: Account }) {
   const { can } = useSession();
   const manage = can("messaging:manage");
   const live = useQuery({ queryKey: ["wa-status", account.id], queryFn: () => api<Account>(`/messaging/accounts/${account.id}/status`), refetchInterval: 8000, initialData: account });
-  const status = live.data?.status ?? account.status;
+  const reported = live.data?.status ?? account.status;
   const qr = useQuery({
     queryKey: ["wa-qr", account.id],
     queryFn: () => api<{ status: string; qr: string | null }>(`/messaging/accounts/${account.id}/qr`),
-    enabled: manage && status !== "CONNECTED",
+    enabled: manage && reported !== "CONNECTED",
     refetchInterval: 5000,
   });
+  // com QR Code ativo na tela, a conta está aguardando leitura (mesmo que o status ainda não tenha sido atualizado)
+  const qrImage = qr.isError ? null : (qr.data?.qr ?? null);
+  const status = reported !== "CONNECTED" && qrImage ? "QR_PENDING" : reported;
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["messaging-accounts"] });
     qc.invalidateQueries({ queryKey: ["wa-status", account.id] });
@@ -94,9 +98,9 @@ function AccountCard({ account }: { account: Account }) {
         </div>
         {manage && status !== "CONNECTED" && (
           <div className="flex size-56 items-center justify-center rounded-xl border bg-white p-2">
-            {qr.data?.qr ? (
+            {qrImage ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={qr.data.qr} alt="QR Code para conectar o WhatsApp" className="size-full" />
+              <img src={qrImage} alt="QR Code para conectar o WhatsApp" className="size-full" />
             ) : (
               <span className="px-4 text-center text-xs text-muted-foreground">{qr.isFetching ? "Gerando QR Code…" : "Clique em Reconectar para gerar o QR Code"}</span>
             )}
@@ -111,10 +115,9 @@ function Rules() {
   const qc = useQueryClient();
   const org = useOrg();
   const { can } = useSession();
-  const [draft, setDraft] = useState<{ maxOutboundPerHour: number; maxOutboundPerDay: number; requireApproval: boolean; optOutKeywords: string } | null>(null);
-  useEffect(() => {
-    if (org.data) setDraft({ ...org.data.settings.messaging, optOutKeywords: org.data.settings.messaging.optOutKeywords.join(", ") });
-  }, [org.data]);
+  const [draft, setDraft] = useSyncedState(org.data, (d): { maxOutboundPerHour: number; maxOutboundPerDay: number; requireApproval: boolean; optOutKeywords: string } | null =>
+    d ? { ...d.settings.messaging, optOutKeywords: d.settings.messaging.optOutKeywords.join(", ") } : null,
+  );
   const save = useMutation({
     mutationFn: () => api("/org", { method: "PATCH", body: { settings: { messaging: { ...draft!, optOutKeywords: draft!.optOutKeywords.split(",").map((s) => s.trim()).filter(Boolean) } } } }),
     onSuccess: () => {

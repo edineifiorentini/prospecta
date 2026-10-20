@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -11,6 +10,7 @@ import { Field } from "@/components/form-field";
 import { SectionCard } from "@/components/page";
 import { api, errorMessage } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { useSyncedState } from "@/lib/hooks";
 
 export type OrgSettings = {
   messaging: { maxOutboundPerHour: number; maxOutboundPerDay: number; requireApproval: boolean; optOutKeywords: string[] };
@@ -28,8 +28,7 @@ export function OrganizationSettings() {
   const qc = useQueryClient();
   const { can } = useSession();
   const org = useOrg();
-  const [draft, setDraft] = useState<Org | null>(null);
-  useEffect(() => setDraft(org.data ?? null), [org.data]);
+  const [draft, setDraft] = useSyncedState(org.data, (d): Org | null => d ?? null);
   const save = useMutation({
     mutationFn: () => api("/org", { method: "PATCH", body: { name: draft!.name, settings: { discovery: draft!.settings.discovery, retention: draft!.settings.retention } } }),
     onSuccess: () => {

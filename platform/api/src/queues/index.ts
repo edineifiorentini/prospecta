@@ -15,7 +15,7 @@ export type SearchJobData = { searchJobId: string };
 export type EnrichmentJobData = { enrichmentJobId: string };
 export type AuditJobData = { auditId: string };
 export type MessagingJobData = { messageId: string };
-export type MaintenanceJobData = { task: "retention" | "reminders" | "messaging-status" | "stale-jobs" };
+export type MaintenanceJobData = { task: "retention" | "reminders" | "messaging-status" | "stale-jobs" | "data-quality" };
 
 const defaults: JobsOptions = {
   attempts: 2,

@@ -57,9 +57,12 @@ export async function api<T = unknown>(path: string, opts: Options = {}): Promis
     const p = (payload && typeof payload === "object" ? payload : {}) as { code?: string; message?: string; details?: unknown };
     if (res.status === 401 && typeof window !== "undefined" && !path.startsWith("/auth/") && !path.startsWith("/setup")) {
       const next = encodeURIComponent(window.location.pathname + window.location.search);
+      // navegação completa de propósito: descarta o estado da sessão expirada
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.href = `/login?next=${next}`;
     }
     if (p.code === "PASSWORD_CHANGE_REQUIRED" && typeof window !== "undefined" && window.location.pathname !== "/trocar-senha") {
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.href = "/trocar-senha";
     }
     throw new ApiError(res.status, p.code ?? "ERROR", p.message ?? `Erro ${res.status}`, p.details);
@@ -74,3 +77,27 @@ export function downloadUrl(path: string, query?: Record<string, unknown>) {
 
 export const errorMessage = (err: unknown) =>
   err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Algo deu errado. Tente novamente.";
+
+/** Baixa um arquivo autenticado mostrando o erro da API (ex.: PDF indisponível) em vez de abrir uma página de erro. */
+export async function downloadFile(path: string, query?: Record<string, unknown>) {
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(path, query), { credentials: "same-origin", cache: "no-store" });
+  } catch {
+    throw new ApiError(0, "OFFLINE", "Sem conexão com o servidor.");
+  }
+  if (!res.ok) {
+    const p = (await res.json().catch(() => ({}))) as { code?: string; message?: string };
+    throw new ApiError(res.status, p.code ?? "ERROR", p.message ?? `Erro ${res.status}`);
+  }
+  const name = res.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1] ?? "download";
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return name;
+}

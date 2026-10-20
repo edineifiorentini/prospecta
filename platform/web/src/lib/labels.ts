@@ -99,3 +99,9 @@ export const MESSAGE_STATUS_LABEL: Record<string, string> = {
   FAILED: "Falhou",
   BLOCKED: "Bloqueada",
 };
+
+/** Cor do marcador de cada etapa do funil. */
+export const STAGE_DOT: Record<string, string> = {
+  slate: "bg-slate-400", sky: "bg-sky-500", teal: "bg-teal-500", emerald: "bg-emerald-500", lime: "bg-lime-500", amber: "bg-amber-500",
+  orange: "bg-orange-500", violet: "bg-violet-500", green: "bg-green-600", rose: "bg-rose-500", blue: "bg-blue-500", pink: "bg-pink-500",
+};

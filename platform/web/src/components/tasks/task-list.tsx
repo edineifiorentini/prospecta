@@ -16,6 +16,7 @@ import { fmtDateTime } from "@/lib/format";
 import { PRIORITY_LABEL } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { Page } from "@/lib/types";
+import { useNow } from "@/lib/hooks";
 
 export type Task = {
   id: string;
@@ -77,6 +78,7 @@ export function TaskComposer({ companyId, dealId, onCreated }: { companyId?: str
 }
 
 export function TaskList({ query, showCompany = true, emptyText }: { query: Record<string, unknown>; showCompany?: boolean; emptyText?: string }) {
+  const now = useNow();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["tasks", query], queryFn: () => api<Page<Task>>("/tasks", { query }) });
   const update = useMutation({
@@ -104,7 +106,6 @@ export function TaskList({ query, showCompany = true, emptyText }: { query: Reco
   if (q.isError) return <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} />;
   if (!q.data?.items.length) return <EmptyState icon={CheckSquare} title={emptyText ?? "Nenhuma tarefa"} description="Crie tarefas com prazo para receber lembretes." />;
 
-  const now = Date.now();
   return (
     <ul className="card-soft divide-y">
       {q.data.items.map((t) => {

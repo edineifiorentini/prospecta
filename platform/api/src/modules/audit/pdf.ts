@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { unavailable } from "../../lib/errors.ts";
 import { logger } from "../../lib/logger.ts";
 
-const esc = (v: unknown) =>
+export const esc = (v: unknown) =>
   String(v ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

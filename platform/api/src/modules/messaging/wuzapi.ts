@@ -101,7 +101,8 @@ export const wuzapiProvider: MessagingProvider = {
       const qr = r?.data?.QRCode ?? null;
       return qr && qr.startsWith("data:image/") ? qr : null;
     } catch (err) {
-      if (err instanceof ProviderError && err.status && err.status < 500) return null;
+      // "no session": o QR expirou ou a sessão ainda não foi iniciada (é preciso Reconectar)
+      if (err instanceof ProviderError && ((err.status && err.status < 500) || /no session/i.test(err.message))) return null;
       throw err;
     }
   },

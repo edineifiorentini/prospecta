@@ -83,7 +83,7 @@ export default function SearchResultsPage() {
 
   if (job.isError) return <ErrorState message={errorMessage(job.error)} onRetry={() => job.refetch()} />;
   const j = job.data;
-  const selectedIds = Object.keys(selection);
+  const selectedIds = [...new Set(Object.keys(selection).map((k) => k.split(":")[0]!).filter((id) => id !== "x"))];
   const params = (j?.params ?? {}) as Record<string, unknown>;
   const activeFilters = [filters.website, filters.phone, filters.email].filter((v) => v !== "any").length + (filters.minRating ? 1 : 0);
 
@@ -126,7 +126,8 @@ export default function SearchResultsPage() {
         columns={columns}
         data={results.data?.items ?? []}
         loading={results.isFetching && !results.data}
-        getRowId={(r) => r.companyId ?? `x-${r.id}`}
+        // um resultado por linha: dois pontos da fonte podem ter sido unificados na mesma empresa
+        getRowId={(r) => `${r.companyId ?? "x"}:${r.id}`}
         canSelect={(r) => !!r.companyId}
         selection={selection}
         onSelectionChange={setSelection}

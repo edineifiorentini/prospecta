@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef, RowSelectionState, SortingState } from "@tanstack/react-table";
 import { toast } from "sonner";
@@ -45,13 +45,43 @@ type CompanyRow = {
 
 const SORT_MAP: Record<string, string> = { empresa: "name", avaliacao: "rating", criada: "createdAt" };
 
+const TRI = new Set(["any", "with", "without"]);
+const num = (v: string | null) => (v && /^d+$/.test(v) ? Number(v) : undefined);
+
+/** Filtros iniciais vindos da URL (atalhos do painel e relatórios). */
+function filtersFromUrl(p: URLSearchParams): CompanyFilters {
+  const tri = (k: string) => (TRI.has(p.get(k) ?? "") ? (p.get(k) as CompanyFilters["website"]) : "any");
+  const inCrm = p.get("inCrm");
+  return {
+    ...DEFAULT_FILTERS,
+    city: p.get("city") ?? undefined,
+    category: p.get("category") ?? undefined,
+    website: tri("website"),
+    phone: tri("phone"),
+    email: tri("email"),
+    social: tri("social"),
+    inCrm: inCrm === "yes" || inCrm === "no" ? inCrm : undefined,
+    minOpportunity: num(p.get("minOpportunity")),
+    maxDataQuality: num(p.get("maxDataQuality")),
+  };
+}
+
 export default function CompaniesPage() {
+  return (
+    <Suspense>
+      <CompaniesInner />
+    </Suspense>
+  );
+}
+
+function CompaniesInner() {
   const router = useRouter();
+  const params = useSearchParams();
   const qc = useQueryClient();
   const { can } = useSession();
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
-  const [filters, setFilters] = useState<CompanyFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<CompanyFilters>(() => filtersFromUrl(params));
   const [sorting, setSorting] = useState<SortingState>([{ id: "criada", desc: true }]);
   const [selection, setSelection] = useState<RowSelectionState>({});
 

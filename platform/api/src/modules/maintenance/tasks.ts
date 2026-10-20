@@ -71,3 +71,29 @@ export async function reconcileStaleJobs(now = new Date()) {
   const audits = await prisma.digitalAudit.updateMany({ where: { status: "RUNNING", startedAt: { lt: new Date(now.getTime() - 45 * 60 * 1000) } }, data: { status: "FAILED", finishedAt: now, error: "Tempo limite excedido." } });
   return { searches: searches.count, enrichments: stale.length, audits: audits.count };
 }
+
+/**
+ * Calcula a qualidade dos dados de empresas sem pontuação ou editadas depois do último cálculo.
+ * Usa só os dados já registrados (sem acessar sites), em lotes pequenos.
+ */
+export async function backfillDataQuality(limit = 300) {
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT c.id FROM companies c
+    LEFT JOIN company_scores s ON s.company_id = c.id AND s.kind = 'DATA_QUALITY'
+    WHERE c.status = 'ACTIVE' AND (s.id IS NULL OR c.updated_at > s.computed_at)
+    ORDER BY c.created_at
+    LIMIT ${limit}`;
+  if (!rows.length) return { updated: 0 };
+  const { recomputeDataQuality } = await import("../audit/service.ts");
+  let updated = 0;
+  for (const r of rows) {
+    try {
+      await recomputeDataQuality(r.id);
+      updated++;
+    } catch (err) {
+      logger.warn({ err: (err as Error).message, companyId: r.id }, "falha ao calcular qualidade dos dados");
+    }
+  }
+  logger.info({ updated }, "qualidade dos dados recalculada");
+  return { updated };
+}

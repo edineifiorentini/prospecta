@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Loader2, Plus, Settings2, Trash2 } from "lucide-react";
@@ -10,13 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, errorMessage } from "@/lib/api";
 import type { KanbanStage } from "./kanban";
+import { useSyncedState } from "@/lib/hooks";
 
 export function StagesDialog({ pipelineId, stages }: { pipelineId: string; stages: (KanbanStage & { _count?: { deals: number } })[] }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [order, setOrder] = useState(stages);
+  const [order, setOrder] = useSyncedState(stages, (s) => s);
   const [name, setName] = useState("");
-  useEffect(() => setOrder(stages), [stages]);
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["pipelines"] });
     qc.invalidateQueries({ queryKey: ["deals"] });

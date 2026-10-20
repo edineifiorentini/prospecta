@@ -38,3 +38,15 @@ export async function setAccountStatus(id: string, status: MessagingAccount["sta
     await prisma.auditLog.create({ data: { organizationId: prev.organizationId, action: `messaging.status_${status.toLowerCase()}`, entityType: "messaging_account", entityId: id, metadata: { from: prev.status, to: status, detail: extra.lastError ?? null } } });
   }
 }
+
+/**
+ * Estado atual no provedor. O WuzAPI responde "desconectado" enquanto aguarda a leitura do QR Code;
+ * se a conta estava aguardando QR e ainda há um QR ativo, mantém QR_PENDING.
+ */
+export async function liveStatus(a: MessagingAccount) {
+  const provider = providerFor(a.provider);
+  const p = toProviderAccount(a);
+  const s = await provider.status(p);
+  if (s.status === "DISCONNECTED" && a.status === "QR_PENDING" && (await provider.qr(p).catch(() => null))) return { ...s, status: "QR_PENDING" as const };
+  return s;
+}

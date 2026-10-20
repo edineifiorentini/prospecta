@@ -85,19 +85,20 @@ export function SearchForm() {
   const [city, state, neighborhood, country] = useWatch({ control: form.control, name: ["city", "state", "neighborhood", "country"] });
 
   // pré-visualização da localização (geocodificação no servidor, com cache)
-  const [geo, setGeo] = useState<{ label: string; latitude: number; longitude: number } | null>(null);
-  const [geoError, setGeoError] = useState<string | null>(null);
+  // o resultado guarda a chave consultada; ao mudar o local, o anterior deixa de ser exibido
+  const geoKey = city && city.trim().length >= 2 ? [city, state, neighborhood, country].join("|") : null;
+  const [geoResult, setGeoResult] = useState<{ key: string; geo?: { label: string; latitude: number; longitude: number }; error?: string } | null>(null);
   useEffect(() => {
-    setGeo(null);
-    setGeoError(null);
-    if (!city || city.trim().length < 2) return;
+    if (!geoKey) return;
     const t = setTimeout(() => {
       api<{ label: string; latitude: number; longitude: number }>("/geocode", { method: "POST", body: { city, state: state || undefined, neighborhood: neighborhood || undefined, country } })
-        .then(setGeo)
-        .catch((e) => setGeoError(errorMessage(e)));
+        .then((geo) => setGeoResult({ key: geoKey, geo }))
+        .catch((e) => setGeoResult({ key: geoKey, error: errorMessage(e) }));
     }, 900);
     return () => clearTimeout(t);
-  }, [city, state, neighborhood, country]);
+  }, [geoKey, city, state, neighborhood, country]);
+  const geo = geoResult?.key === geoKey ? (geoResult.geo ?? null) : null;
+  const geoError = geoResult?.key === geoKey ? (geoResult.error ?? null) : null;
 
   const create = useMutation({
     mutationFn: (v: z.output<typeof schema>) => {

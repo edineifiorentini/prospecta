@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, RotateCcw } from "lucide-react";
@@ -10,6 +9,7 @@ import { SectionCard } from "@/components/page";
 import { api, errorMessage } from "@/lib/api";
 import { SCORE_LABEL } from "@/lib/labels";
 import { useSession } from "@/lib/session";
+import { useSyncedState } from "@/lib/hooks";
 
 type Criterion = { key: string; dimension: string; label: string; weight: number; defaultWeight: number };
 
@@ -17,10 +17,7 @@ export function ScoringSettings() {
   const qc = useQueryClient();
   const { can } = useSession();
   const q = useQuery({ queryKey: ["scoring-criteria"], queryFn: () => api<{ version: string; minConfidence: number; criteria: Criterion[] }>("/scoring/criteria") });
-  const [weights, setWeights] = useState<Record<string, number>>({});
-  useEffect(() => {
-    if (q.data) setWeights(Object.fromEntries(q.data.criteria.map((c) => [c.key, c.weight])));
-  }, [q.data]);
+  const [weights, setWeights] = useSyncedState(q.data, (d): Record<string, number> => (d ? Object.fromEntries(d.criteria.map((c) => [c.key, c.weight])) : {}));
   const save = useMutation({
     mutationFn: () => {
       const scoring: Record<string, Record<string, number>> = {};
