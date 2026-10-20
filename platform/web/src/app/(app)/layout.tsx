@@ -9,6 +9,7 @@ import { GlobalSearch } from "@/components/shell/global-search";
 import { UserMenu } from "@/components/shell/user-menu";
 import { OfflineBanner } from "@/components/shell/offline-banner";
 import { useSession } from "@/lib/session";
+import { GuidedTour } from "@/components/onboarding/guided-tour";
 
 export default function AppLayout({ children }: LayoutProps<"/">) {
   const { session, loading } = useSession();
@@ -33,7 +34,14 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
           <UserMenu />
         </header>
         <OfflineBanner />
-        <div className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 md:px-8 md:py-8">{session && !blocked ? children : <ShellSkeleton />}</div>
+        <div className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 md:px-8 md:py-8">{session && !blocked ? (
+            <>
+              {children}
+              <GuidedTour />
+            </>
+          ) : (
+            <ShellSkeleton />
+          )}</div>
       </SidebarInset>
     </SidebarProvider>
   );

@@ -13,7 +13,8 @@ export default async function globalSetup() {
   const args = ["--email", E2E_EMAIL, "--name", "Teste E2E"];
   const r = docker
     ? spawnSync("docker", ["compose", "exec", "-T", "platform-api", "node", "dist/cli/owner.js", ...args], { cwd: root, encoding: "utf8" })
-    : spawnSync("npm", ["run", "--silent", "cli:owner", "--", ...args], { cwd: resolve(root, "platform/api"), encoding: "utf8", shell: true });
+    : // com shell, argumentos com espaço precisam de aspas
+      spawnSync("npm", ["run", "--silent", "cli:owner", "--", ...args.map((a) => (a.includes(" ") ? `"${a}"` : a))], { cwd: resolve(root, "platform/api"), encoding: "utf8", shell: true });
   const tempPassword = r.stdout.match(/Senha temporária: (\S+)/)?.[1];
   if (r.status !== 0 || !tempPassword) throw new Error(`Não foi possível criar o usuário de teste: ${r.stderr || r.stdout}`);
   mkdirSync(dirname(STATE), { recursive: true });

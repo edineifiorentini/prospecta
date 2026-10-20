@@ -66,6 +66,8 @@ Os dados ficam nos volumes `prospecta_pgdata` (banco), `prospecta_wuzapidata` (s
 
 ## Uso
 
+No primeiro acesso, um **tour guiado** apresenta as telas principais. O roteiro **Primeiros passos**, no menu lateral, marca sozinho o que já foi feito a partir dos registros reais e mostra o próximo passo. O tour pode ser retomado ou revisto a qualquer momento pelo menu do usuário (Tour guiado).
+
 1. **Encontrar empresas** (*Encontrar Empresas*)
    - Informe palavra-chave, cidade, bairro, raio e limite.
    - Fontes: OpenStreetMap, ou o Google Maps Scraper (opcional, sujeito a bloqueio de IP pelo Google e contrário aos Termos do Google).
@@ -129,8 +131,8 @@ Com `--apply --yes`, **substitui** o banco atual. Antes ele salva um backup de s
 | Suíte | Como rodar | Requisitos |
 |---|---|---|
 | Unitários (78) | `cd platform/api && npm run test:unit` | nenhum |
-| Integração (37) | `cd platform/api && npm run test:integration` | Postgres e Valkey publicados (modo desenvolvimento) e `platform/.env.dev`; usa o banco separado `prospecta_test` |
-| Ponta a ponta (19) | `cd platform/e2e && npm install && npx playwright test` | pilha rodando em http://localhost:3000; usa o Edge instalado (`E2E_CHANNEL=chrome` para o Chrome) |
+| Integração (41) | `cd platform/api && npm run test:integration` | Postgres e Valkey publicados (modo desenvolvimento) e `platform/.env.dev`; usa o banco separado `prospecta_test` |
+| Ponta a ponta (22) | `cd platform/e2e && npm install && npx playwright test` | pilha rodando em http://localhost:3000; usa o Edge instalado (`E2E_CHANNEL=chrome` para o Chrome) |
 
 Os testes E2E criam um usuário próprio (`e2e@prospecta.local`) com senha temporária e registros com o prefixo `[E2E]`; ao final, apagam esses registros e o próprio usuário.
 

@@ -40,7 +40,7 @@ function Items({ items }: { items: NavItem[] }) {
 
 export function AppSidebar() {
   return (
-    <Sidebar collapsible="icon" variant="sidebar" className="border-r-0">
+    <Sidebar collapsible="icon" variant="sidebar" className="border-r-0" data-tour="nav">
       <SidebarHeader className="px-3 pt-4 pb-2">
         <Link href="/dashboard" className="flex items-center rounded-lg outline-none group-data-[collapsible=icon]:justify-center" aria-label="Prospecta — início">
           <span className="group-data-[collapsible=icon]:hidden">

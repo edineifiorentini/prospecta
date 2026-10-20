@@ -92,6 +92,7 @@ export default function CrmPage() {
       ) : !deals.data?.deals.length && !q && owner === "all" ? (
         <EmptyState icon={KanbanSquare} title="Pipeline vazio" description="Envie empresas ao CRM a partir dos resultados de busca, da lista de empresas ou da ficha de cada empresa." />
       ) : (
+        <div data-tour="kanban">
         <KanbanBoard
           stages={pipeline.stages}
           deals={deals.data?.deals ?? []}
@@ -105,6 +106,7 @@ export default function CrmPage() {
             if (toStage.kind === "WON") toast.success("Negociação ganha! 🎉");
           }}
         />
+        </div>
       )}
 
       <Dialog open={!!lostPrompt} onOpenChange={(o) => !o && (setLostPrompt(null), qc.invalidateQueries({ queryKey: ["deals"] }))}>

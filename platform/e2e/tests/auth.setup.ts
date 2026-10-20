@@ -24,5 +24,11 @@ setup("primeiro acesso exige trocar a senha temporária", async ({ page }) => {
   await expect(page).toHaveURL(/\/dashboard/);
   await expect(page.getByRole("heading", { name: /Olá, Teste/ })).toBeVisible();
   expect((await page.request.get("/api/companies")).status()).toBe(200);
+
+  // primeiro acesso abre o tour guiado; aqui ele é adiado (o tour tem teste próprio)
+  const welcome = page.getByRole("dialog", { name: /Boas-vindas ao Prospecta/ });
+  await expect(welcome).toBeVisible();
+  await welcome.getByRole("button", { name: "Agora não" }).click();
+  await expect(welcome).toBeHidden();
   await page.context().storageState({ path: ".auth/user.json" });
 });

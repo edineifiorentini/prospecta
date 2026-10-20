@@ -51,7 +51,7 @@ export function NewCompanyDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm">
+        <Button size="sm" data-tour="new-company">
           <Plus /> Nova empresa
         </Button>
       </DialogTrigger>

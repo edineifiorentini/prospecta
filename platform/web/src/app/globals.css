@@ -64,6 +64,8 @@
 }
 
 :root {
+  /* escurecimento ao redor do destaque do tour guiado */
+  --tour-dim: rgb(16 24 20 / 0.55);
   --radius: 0.75rem;
   --background: oklch(0.982 0.002 247);
   --foreground: oklch(0.2 0.012 255);
@@ -107,6 +109,7 @@
 }
 
 .dark {
+  --tour-dim: rgb(0 0 0 / 0.72);
   --background: oklch(0.165 0.006 255);
   --foreground: oklch(0.96 0.004 247);
   --surface: oklch(0.19 0.007 255);

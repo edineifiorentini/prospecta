@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useQueryClient } from "@tanstack/react-query";
-import { LogOut, Monitor, Moon, Settings, ShieldCheck, Sun } from "lucide-react";
+import { Compass, LogOut, Monitor, Moon, Rocket, Settings, ShieldCheck, Sun } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { api, setCsrfToken } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { ROLE_LABEL } from "@/lib/labels";
+import { useOnboarding } from "@/components/onboarding/use-onboarding";
 
 const initials = (name: string) =>
   name
@@ -34,6 +35,7 @@ export function UserMenu() {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const qc = useQueryClient();
+  const { startTour } = useOnboarding();
   if (!session) return null;
 
   const logout = async () => {
@@ -76,6 +78,14 @@ export function UserMenu() {
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => startTour(0)}>
+          <Compass /> Tour guiado
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/primeiros-passos">
+            <Rocket /> Primeiros passos
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/configuracoes">
             <Settings /> Configurações

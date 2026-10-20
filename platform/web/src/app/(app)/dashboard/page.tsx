@@ -30,6 +30,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { EmptyState, ErrorState, PageHeader, SectionCard } from "@/components/page";
 import { FiltersBar } from "@/components/dashboard/filters-bar";
 import { ExportMenu } from "@/components/dashboard/export-menu";
+import { ChecklistCard } from "@/components/onboarding/checklist-card";
 import type { DashboardData } from "@/components/dashboard/types";
 import { api, errorMessage } from "@/lib/api";
 import { fmtMoney, fmtNumber, fmtRelative } from "@/lib/format";
@@ -141,7 +142,8 @@ function DashboardInner() {
   return (
     <>
       {header}
-      <div className="mb-5">
+      <ChecklistCard />
+      <div className="mb-5" data-tour="dashboard-filters">
         <FiltersBar />
       </div>
       {!d ? (
@@ -159,7 +161,7 @@ function DashboardInner() {
         />
       ) : (
         <div className={cn("grid grid-cols-1 gap-4 transition-opacity", m.isFetching && "opacity-80")}>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6" data-tour="dashboard-kpis">
             <Kpi icon={Building2} label="Novos leads" value={fmtNumber(d.leads.newInPeriod)} hint={`de ${fmtNumber(d.leads.total)} empresas ativas`} href={companies({})} help="Empresas cadastradas no período por busca, importação ou cadastro manual." />
             <Kpi icon={UserCheck} label="Leads qualificados" value={fmtNumber(d.leads.qualified)} hint="no funil, após a 1ª etapa" href="/crm" help="Situação atual: empresas com negociação aberta ou ganha que já saíram da primeira etapa do funil." />
             <Kpi icon={MessageCircle} label="Contatos realizados" value={fmtNumber(d.activity.contacts.total)} hint={`${d.activity.contacts.calls} ligações · ${d.activity.contacts.whatsappSent} WhatsApp`} help="Ligações, reuniões e e-mails registrados no período, mais mensagens de WhatsApp com envio confirmado." />

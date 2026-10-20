@@ -70,7 +70,7 @@ function ReportsInner() {
       </div>
       {!allowed && <p className="mb-4 rounded-lg border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">Seu perfil pode consultar os indicadores, mas não exportar arquivos. Peça a um gestor ou administrador.</p>}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-tour="reports">
         <ReportCard icon={Sigma} title="Resumo de indicadores" description="Leads, funil, contatos, tarefas, segmentos e distribuição das pontuações, cada um com a forma de cálculo.">
           {btn("/reports/summary.pdf", "PDF", query, true)}
           {btn("/reports/summary.csv", "CSV", query)}

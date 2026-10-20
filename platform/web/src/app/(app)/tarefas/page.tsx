@@ -21,7 +21,7 @@ export default function TasksPage() {
         title="Tarefas"
         description={summary.data ? `${summary.data.open} abertas · ${summary.data.today} para hoje · ${summary.data.overdue} atrasadas` : "Lembretes e próximas atividades comerciais."}
       />
-      <div className="mb-4 grid gap-4">
+      <div className="mb-4 grid gap-4" data-tour="tasks">
         {can("tasks:write") && <TaskComposer />}
         <div className="flex flex-wrap items-center gap-2">
           <Tabs value={when} onValueChange={setWhen}>

@@ -56,6 +56,7 @@ Todos os serviços estão no Docker Compose (projeto `prospecta`). O `docker-com
 | `messaging` | Provedores (WuzAPI e Cloud API), política de envio, consentimento, webhooks assinados |
 | `reports` | Métricas do painel e exportações (CSV/PDF) |
 | `privacy` | Pedidos de titulares (localizar, exportar, excluir) e bloqueio de coleta |
+| `onboarding` | Andamento do tour guiado por usuário e roteiro de primeiros passos calculado dos registros |
 | `maintenance` | Retenção, lembretes, reconciliação de jobs travados, cálculo de qualidade dos dados |
 
 Filas (BullMQ sobre Valkey):

@@ -172,6 +172,7 @@ function CompaniesInner() {
       {list.isError ? (
         <ErrorState message={errorMessage(list.error)} onRetry={() => list.refetch()} />
       ) : (
+        <div data-tour="companies-table">
         <DataTable
           columns={columns}
           data={list.data?.items ?? []}
@@ -234,6 +235,7 @@ function CompaniesInner() {
             </>
           }
         />
+        </div>
       )}
     </>
   );

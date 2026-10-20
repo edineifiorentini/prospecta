@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readState } from "../lib.ts";
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -23,7 +24,9 @@ test("cabeçalhos de segurança e webhook fechado para fora", async ({ request }
   const h = res.headers();
   expect(h["content-security-policy"]).toContain("frame-ancestors 'none'");
   expect(h["x-content-type-options"]).toBe("nosniff");
-  // o webhook do WhatsApp só é aceito pela rede interna dos containers
-  const hook = await request.post("/api/webhooks/wuzapi", { data: { type: "Message" } });
-  expect(hook.status()).toBeGreaterThanOrEqual(400);
+  // na pilha Docker o gateway fecha o webhook do WhatsApp para fora (só a rede interna chega à API)
+  if (readState().mode === "docker") {
+    const hook = await request.post("/api/webhooks/wuzapi", { data: { type: "Message" } });
+    expect(hook.status()).toBe(404);
+  }
 });

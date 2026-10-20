@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 export function PageHeader({ title, description, actions, className }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; className?: string }) {
   return (
-    <div className={cn("mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between", className)}>
+    <div data-tour="page-header" className={cn("mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between", className)}>
       <div className="min-w-0">
         <h1 className="text-2xl font-semibold tracking-tight text-balance">{title}</h1>
         {description && <p className="mt-1 max-w-2xl text-sm text-muted-foreground text-pretty">{description}</p>}
@@ -42,9 +42,9 @@ export function ErrorState({ message, onRetry, className }: { message: string; o
   );
 }
 
-export function SectionCard({ title, description, actions, children, className, bodyClassName }: { title?: ReactNode; description?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; bodyClassName?: string }) {
+export function SectionCard({ title, description, actions, children, className, bodyClassName, tour }: { title?: ReactNode; description?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; bodyClassName?: string; tour?: string }) {
   return (
-    <section className={cn("card-soft", className)}>
+    <section className={cn("card-soft", className)} data-tour={tour}>
       {(title || actions) && (
         <div className="flex items-start justify-between gap-3 border-b px-5 py-4">
           <div className="min-w-0">

@@ -66,6 +66,7 @@ export function GlobalSearch() {
     <>
       <Button
         variant="outline"
+        data-tour="global-search"
         onClick={() => setOpen(true)}
         className="h-9 w-full max-w-md justify-start gap-2 rounded-lg border-border/80 bg-card/70 px-3 font-normal text-muted-foreground shadow-none"
         aria-label="Busca global"

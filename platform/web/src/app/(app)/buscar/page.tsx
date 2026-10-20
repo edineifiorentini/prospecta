@@ -17,7 +17,7 @@ export default function FindCompaniesPage() {
         description="Pesquise em fontes autorizadas ou importe sua própria planilha. Os resultados são deduplicados e registrados com a origem de cada informação."
       />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        <SectionCard>
+        <SectionCard tour="search-form">
           <Tabs defaultValue="search">
             <TabsList className="mb-5">
               <TabsTrigger value="search">
@@ -35,7 +35,7 @@ export default function FindCompaniesPage() {
             </TabsContent>
           </Tabs>
         </SectionCard>
-        <div>
+        <div data-tour="search-jobs">
           <h2 className="mb-3 text-sm font-semibold">Buscas e importações recentes</h2>
           <JobList />
         </div>

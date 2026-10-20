@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   ListChecks,
   MessageCircle,
+  Rocket,
   Search,
   Settings,
   type LucideIcon,
@@ -26,4 +27,7 @@ export const NAV_MAIN: NavItem[] = [
   { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
 ];
 
-export const NAV_FOOTER: NavItem[] = [{ href: "/configuracoes", label: "Configurações", icon: Settings }];
+export const NAV_FOOTER: NavItem[] = [
+  { href: "/primeiros-passos", label: "Primeiros passos", icon: Rocket },
+  { href: "/configuracoes", label: "Configurações", icon: Settings },
+];
