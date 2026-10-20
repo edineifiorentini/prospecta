@@ -12,6 +12,7 @@ export type SessionData =
       authenticated: true;
       csrfToken: string;
       user: { id: string; name: string; email: string };
+      mustChangePassword: boolean;
       organization: { id: string; name: string; slug: string } | null;
       role: Role;
       permissions: string[];

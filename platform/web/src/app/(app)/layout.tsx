@@ -14,9 +14,11 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
   const { session, loading } = useSession();
   const router = useRouter();
 
+  const blocked = !!session?.mustChangePassword;
   useEffect(() => {
     if (!loading && !session) router.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`);
-  }, [loading, session, router]);
+    else if (blocked) router.replace("/trocar-senha");
+  }, [loading, session, blocked, router]);
 
   return (
     <SidebarProvider>
@@ -31,7 +33,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
           <UserMenu />
         </header>
         <OfflineBanner />
-        <div className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 md:px-8 md:py-8">{session ? children : <ShellSkeleton />}</div>
+        <div className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 md:px-8 md:py-8">{session && !blocked ? children : <ShellSkeleton />}</div>
       </SidebarInset>
     </SidebarProvider>
   );

@@ -69,6 +69,8 @@ model User {
   lockedUntil      DateTime? @map("locked_until")
   lastLoginAt      DateTime? @map("last_login_at")
   passwordChangedAt DateTime @default(now()) @map("password_changed_at")
+  /// Senha temporária: o usuário precisa trocá-la antes de usar o sistema
+  mustChangePassword Boolean @default(false) @map("must_change_password")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 

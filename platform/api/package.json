@@ -21,8 +21,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
-    "db:seed": "tsx src/cli/seed.ts",
-    "cli": "node dist/cli/index.js"
+    "cli:owner": "tsx --env-file-if-exists=../.env.dev src/cli/owner.ts"
   },
   "dependencies": {
     "@crawlee/cheerio": "3.18.2",

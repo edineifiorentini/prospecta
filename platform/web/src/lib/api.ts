@@ -59,6 +59,9 @@ export async function api<T = unknown>(path: string, opts: Options = {}): Promis
       const next = encodeURIComponent(window.location.pathname + window.location.search);
       window.location.href = `/login?next=${next}`;
     }
+    if (p.code === "PASSWORD_CHANGE_REQUIRED" && typeof window !== "undefined" && window.location.pathname !== "/trocar-senha") {
+      window.location.href = "/trocar-senha";
+    }
     throw new ApiError(res.status, p.code ?? "ERROR", p.message ?? `Erro ${res.status}`, p.details);
   }
   return payload as T;

@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { env } from "../config/env.ts";
 import { prisma, type Role } from "../lib/prisma.ts";
 import { randomToken, safeEqual, sha256 } from "../lib/crypto.ts";
-import { forbidden, unauthorized } from "../lib/errors.ts";
+import { AppError, forbidden, unauthorized } from "../lib/errors.ts";
 import { can, type Permission } from "../modules/auth/rbac.ts";
 
 export const SESSION_COOKIE = "pp_session";
@@ -19,6 +19,8 @@ export type AuthContext = {
   csrfToken: string;
   email: string;
   name: string;
+  /** senha temporária ainda não trocada: só as rotas de PASSWORD_CHANGE_ALLOWED respondem */
+  mustChangePassword: boolean;
 };
 
 declare module "fastify" {
@@ -65,6 +67,8 @@ export function clearSessionCookie(reply: FastifyReply) {
 }
 
 const UNSAFE = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+/** Rotas liberadas enquanto o usuário tem uma senha temporária. */
+const PASSWORD_CHANGE_ALLOWED = new Set(["/api/auth/session", "/api/auth/password", "/api/auth/logout"]);
 const allowedOrigins = new Set([new URL(env.APP_BASE_URL).origin, "http://localhost:3000", "http://127.0.0.1:3000", ...(env.NODE_ENV === "development" ? ["http://localhost:3001"] : [])]);
 
 async function resolveSession(req: FastifyRequest): Promise<AuthContext | null> {
@@ -99,6 +103,7 @@ async function resolveSession(req: FastifyRequest): Promise<AuthContext | null> 
     csrfToken: session.csrfToken,
     email: session.user.email,
     name: session.user.name,
+    mustChangePassword: session.user.mustChangePassword,
   };
 }
 
@@ -110,7 +115,7 @@ export default fp(async (app) => {
     if (req.url.startsWith("/api/docs")) {
       // documentação da API visível apenas para usuários autenticados
       req.auth = await resolveSession(req);
-      if (!req.auth) throw unauthorized("Faça login para ver a documentação da API.");
+      if (!req.auth || req.auth.mustChangePassword) throw unauthorized("Faça login para ver a documentação da API.");
       return;
     }
     if (!req.routeOptions.url) return; // 404 tratado adiante
@@ -129,6 +134,9 @@ export default fp(async (app) => {
 
     if (cfg.public) return;
     if (!req.auth) throw unauthorized();
+    if (req.auth.mustChangePassword && !PASSWORD_CHANGE_ALLOWED.has(req.routeOptions.url)) {
+      throw new AppError(403, "PASSWORD_CHANGE_REQUIRED", "Troque a senha temporária antes de continuar.");
+    }
     if (cfg.permission && !can(req.auth.role, cfg.permission)) throw forbidden();
   });
 });

@@ -42,10 +42,10 @@ function LoginForm() {
   const onSubmit = form.handleSubmit(async (values) => {
     setError(null);
     try {
-      const res = await api<{ csrfToken: string }>("/auth/login", { method: "POST", body: values });
+      const res = await api<{ csrfToken: string; mustChangePassword: boolean }>("/auth/login", { method: "POST", body: values });
       setCsrfToken(res.csrfToken);
       await qc.invalidateQueries({ queryKey: sessionQueryKey });
-      router.replace(safeNext(params.get("next")));
+      router.replace(res.mustChangePassword ? "/trocar-senha" : safeNext(params.get("next")));
     } catch (err) {
       setError(errorMessage(err));
     }

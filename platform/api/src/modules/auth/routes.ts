@@ -101,7 +101,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
       await prisma.user.update({ where: { id: user.id }, data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() } });
       const session = await createSession(reply, req, user.id, membership.organizationId);
       await writeAudit(req, { action: "auth.login", userId: user.id, organizationId: membership.organizationId });
-      return { ok: true, csrfToken: session.csrfToken };
+      return { ok: true, csrfToken: session.csrfToken, mustChangePassword: user.mustChangePassword };
     },
   );
 
@@ -121,6 +121,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
       authenticated: true as const,
       csrfToken: req.auth.csrfToken,
       user: { id: req.auth.userId, name: req.auth.name, email: req.auth.email },
+      mustChangePassword: req.auth.mustChangePassword,
       organization: org,
       role: req.auth.role,
       permissions: permissionsOf(req.auth.role),
@@ -155,8 +156,12 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
     async (req, reply) => {
       const user = await prisma.user.findUniqueOrThrow({ where: { id: req.auth!.userId } });
       if (!(await verifyPassword(user.passwordHash, req.body.currentPassword))) throw badRequest("Senha atual incorreta.");
+      if (await verifyPassword(user.passwordHash, req.body.newPassword)) throw badRequest("A nova senha precisa ser diferente da atual.");
       const now = new Date();
-      await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(req.body.newPassword), passwordChangedAt: now } });
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: await hashPassword(req.body.newPassword), passwordChangedAt: now, mustChangePassword: false },
+      });
       await prisma.session.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: now } });
       await writeAudit(req, { action: "auth.password_changed" });
       const session = await createSession(reply, req, user.id, req.auth!.organizationId);
@@ -203,7 +208,10 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
       await prisma.$transaction([
         prisma.passwordResetToken.update({ where: { id: rec.id }, data: { usedAt: now } }),
         prisma.passwordResetToken.updateMany({ where: { userId: rec.userId, usedAt: null }, data: { usedAt: now } }),
-        prisma.user.update({ where: { id: rec.userId }, data: { passwordHash: await hashPassword(req.body.password), passwordChangedAt: now, failedLoginCount: 0, lockedUntil: null } }),
+        prisma.user.update({
+          where: { id: rec.userId },
+          data: { passwordHash: await hashPassword(req.body.password), passwordChangedAt: now, failedLoginCount: 0, lockedUntil: null, mustChangePassword: false },
+        }),
         prisma.session.updateMany({ where: { userId: rec.userId, revokedAt: null }, data: { revokedAt: now } }),
       ]);
       await writeAudit(req, { action: "auth.password_reset", userId: rec.userId });
