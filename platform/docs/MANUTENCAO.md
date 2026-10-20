@@ -74,6 +74,34 @@ Use apenas números de teste autorizados.
 
 **Uso comercial em escala.** Migre para a WhatsApp Business Cloud API (adaptador `messaging/cloud-api.ts`), com modelos aprovados pela Meta.
 
+## Mapa do Google (opcional)
+
+Sem chave, a plataforma usa o mapa do OpenStreetMap. Com chave, usa o mapa visual do Google e **volta sozinha** para o OpenStreetMap se o Google recusar a chave, se a cota do dia acabar ou se não houver conexão (um aviso aparece no canto do mapa).
+
+**Custo:** a Maps JavaScript API tem 10.000 carregamentos de mapa grátis por mês (depois, US$ 7 por 1.000); a Geocoding API tem 10.000 consultas grátis por mês (depois, US$ 5 por 1.000). Cada abertura de uma tela com mapa conta 1 carregamento; mover o mapa e dar zoom não contam. O Google exige conta de faturamento com cartão mesmo dentro da faixa gratuita.
+
+**Configuração (Google Cloud Console):**
+
+1. Crie um projeto e vincule uma conta de faturamento.
+2. Ative a **Maps JavaScript API** e, se quiser localizar as cidades pelo Google, a **Geocoding API**.
+3. Crie a **chave do mapa** (Credenciais → Chave de API) e restrinja:
+   - **Sites**: `http://localhost:3000/*` e `http://127.0.0.1:3000/*`;
+   - **APIs**: só a Maps JavaScript API.
+4. Opcional: crie uma **segunda chave, para o servidor**, restrita só à Geocoding API. Ela não pode ter restrição por site, porque é usada pela API da plataforma, não pelo navegador.
+5. Opcional: em **Gerenciamento de mapas**, crie um **ID de mapa** (JavaScript, vetorial). Sem ele a plataforma usa `DEMO_MAP_ID`, que o Google libera para testes.
+6. Em cada API, aba **Cotas**, limite o uso diário (ex.: 300 carregamentos de mapa e 100 geocodificações por dia) para nunca passar da faixa gratuita.
+7. Em **Faturamento → Orçamentos e alertas**, crie um alerta de valor baixo.
+
+**Na plataforma:** preencha no `.env` da raiz e aplique com `docker compose up -d`:
+
+```
+GOOGLE_MAPS_API_KEY=chave-do-mapa
+GOOGLE_MAPS_MAP_ID=id-do-mapa          # opcional
+GOOGLE_GEOCODING_API_KEY=chave-servidor # opcional
+```
+
+A chave do mapa fica visível no navegador (é assim que o Google funciona); a restrição por site é o que a protege. A plataforma só a entrega a usuários logados. Coordenadas obtidas do Google ficam em cache por no máximo 30 dias, conforme os termos do Google Maps Platform.
+
 ## Localização das cidades
 
 As buscas usam serviços públicos e gratuitos, que às vezes ficam instáveis.

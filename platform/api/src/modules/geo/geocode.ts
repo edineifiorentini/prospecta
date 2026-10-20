@@ -139,13 +139,65 @@ async function photon(text: string, input: LocationInput): Promise<GeoPlace | nu
   return best ? photonToPlace(best) : null;
 }
 
-const PROVIDERS: [string, (text: string, input: LocationInput) => Promise<GeoPlace | null>][] = [
-  ["Nominatim", nominatim],
-  ["Photon", photon],
-];
+export type GoogleGeoResult = {
+  formatted_address?: string;
+  types: string[];
+  geometry: { location: { lat: number; lng: number }; viewport?: { northeast: { lat: number; lng: number }; southwest: { lat: number; lng: number } } };
+  address_components: { long_name: string; short_name: string; types: string[] }[];
+};
+
+const LOCAL_TYPES = ["sublocality", "sublocality_level_1", "neighborhood"];
+const googlePart = (r: GoogleGeoResult, types: string[]) => r.address_components.find((c) => c.types.some((t) => types.includes(t)));
+
+/** Converte um resultado da Geocoding API do Google. */
+export function googleToPlace(r: GoogleGeoResult): GeoPlace {
+  const city = googlePart(r, ["locality"]) ?? googlePart(r, ["administrative_area_level_2"]);
+  const state = googlePart(r, ["administrative_area_level_1"]);
+  const country = googlePart(r, ["country"]);
+  const label = [googlePart(r, LOCAL_TYPES)?.long_name, city?.long_name, state?.long_name, country?.long_name].filter(Boolean).join(", ") || r.formatted_address || "";
+  const v = r.geometry.viewport;
+  return {
+    latitude: r.geometry.location.lat,
+    longitude: r.geometry.location.lng,
+    label,
+    bbox: v ? [v.southwest.lat, v.northeast.lat, v.southwest.lng, v.northeast.lng] : undefined,
+    address: { city: city?.long_name ?? "", state: state?.short_name ?? "", country: country?.long_name ?? "" },
+    source: "Google",
+  };
+}
+
+async function google(text: string, input: LocationInput): Promise<GeoPlace | null> {
+  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+  url.searchParams.set("address", text);
+  url.searchParams.set("language", "pt-BR");
+  url.searchParams.set("region", "br");
+  if (isBrazil(input.country)) url.searchParams.set("components", "country:BR");
+  url.searchParams.set("key", env.GOOGLE_GEOCODING_API_KEY);
+  const json = await getJson<{ status: string; results?: GoogleGeoResult[] }>(url);
+  if (json.status === "ZERO_RESULTS") return null;
+  // chave recusada, cota esgotada etc.: usa os serviços abertos como reserva
+  if (json.status !== "OK") throw new ServiceDown(`Google ${json.status}`);
+  const best = pickPlace(json.results ?? [], input, (r) => {
+    const local = googlePart(r, LOCAL_TYPES);
+    const city = googlePart(r, ["locality", "administrative_area_level_2"]);
+    return {
+      name: (input.neighborhood?.trim() ? local : city)?.long_name,
+      isPoint: true,
+      kinds: [...(r.types.includes("locality") ? ["city"] : []), ...(r.types.some((t) => LOCAL_TYPES.includes(t)) ? ["suburb"] : [])],
+    };
+  });
+  return best ? googleToPlace(best) : null;
+}
+
+type Provider = [string, (text: string, input: LocationInput) => Promise<GeoPlace | null>];
+/** Com chave de servidor do Google, ele vem primeiro; Nominatim e Photon (OpenStreetMap) seguem como reserva. */
+const providers = (): Provider[] => [...(env.GOOGLE_GEOCODING_API_KEY ? ([["Google", google]] as Provider[]) : []), ["Nominatim", nominatim], ["Photon", photon]];
+
+// os termos do Google Maps Platform limitam o cache de coordenadas a 30 dias
+const GOOGLE_CACHE_MS = 30 * 86_400_000;
 
 /**
- * Localiza o endereço da busca: Nominatim primeiro e Photon como reserva (ambos com dados do OpenStreetMap).
+ * Localiza o endereço da busca: Google (se configurado), depois Nominatim e Photon.
  * Lança 422 se nenhum serviço encontrou o lugar e 503 se todos estiverem fora do ar.
  */
 export async function geocode(input: LocationInput): Promise<GeoPlace> {
@@ -155,10 +207,15 @@ export async function geocode(input: LocationInput): Promise<GeoPlace> {
 
   const cached = await prisma.geocodeCache.findUnique({ where: { query: key } });
   if (cached) {
-    const raw = (cached.raw ?? {}) as { bbox?: [number, number, number, number]; address?: Record<string, string> };
-    return { latitude: cached.latitude, longitude: cached.longitude, label: cached.label, bbox: raw.bbox, address: raw.address, source: "cache" };
+    const raw = (cached.raw ?? {}) as { bbox?: [number, number, number, number]; address?: Record<string, string>; source?: string };
+    if (raw.source === "Google" && Date.now() - cached.createdAt.getTime() > GOOGLE_CACHE_MS) {
+      await prisma.geocodeCache.delete({ where: { id: cached.id } }).catch(() => undefined);
+    } else {
+      return { latitude: cached.latitude, longitude: cached.longitude, label: cached.label, bbox: raw.bbox, address: raw.address, source: "cache" };
+    }
   }
 
+  const PROVIDERS = providers();
   const down: string[] = [];
   for (const [name, provider] of PROVIDERS) {
     try {

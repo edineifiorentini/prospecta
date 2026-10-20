@@ -24,6 +24,9 @@ x-api-env: &api-env
   NOMINATIM_URL: ${NOMINATIM_URL:-https://nominatim.openstreetmap.org}
   PHOTON_URL: ${PHOTON_URL:-https://photon.komoot.io}
   SEARCH_SOURCES: ${SEARCH_SOURCES:-GOOGLE_MAPS_SCRAPER}
+  GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+  GOOGLE_MAPS_MAP_ID: ${GOOGLE_MAPS_MAP_ID:-}
+  GOOGLE_GEOCODING_API_KEY: ${GOOGLE_GEOCODING_API_KEY:-}
   HTTP_USER_AGENT: ${HTTP_USER_AGENT:-ProspectaBot/0.1 (+local; contato via administrador)}
   WUZAPI_URL: http://wuzapi:8080
   WUZAPI_ADMIN_TOKEN: ${WUZAPI_ADMIN_TOKEN:?defina WUZAPI_ADMIN_TOKEN no .env}

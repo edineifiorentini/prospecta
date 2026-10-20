@@ -52,3 +52,61 @@ describe("geocodificação com reserva", () => {
     expect(r.problem?.kind).toBe("not_found");
   });
 });
+
+describe("geocodificação pelo Google (opcional)", () => {
+  const googleHit = {
+    status: "OK",
+    results: [
+      {
+        types: ["locality", "political"],
+        geometry: { location: { lat: -23.7334, lng: -52.8702 } },
+        address_components: [
+          { long_name: "Tapejara Google", short_name: "Tapejara Google", types: ["locality"] },
+          { long_name: "Paraná", short_name: "PR", types: ["administrative_area_level_1"] },
+          { long_name: "Brasil", short_name: "BR", types: ["country"] },
+        ],
+      },
+    ],
+  };
+
+  function stubWithGoogle(google: () => Response) {
+    const hosts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: URL | string) => {
+        const url = new URL(String(input));
+        hosts.push(url.host);
+        if (url.host === "maps.googleapis.com") return google();
+        if (url.host.includes("nominatim")) return Response.json([{ lat: "-1", lon: "-2", display_name: "Reserva", name: "Reserva", osm_type: "node", type: "town" }]);
+        return Response.json({ features: [] });
+      }),
+    );
+    return hosts;
+  }
+
+  it("com chave de servidor, o Google vem primeiro", async () => {
+    const { env } = await import("../../src/config/env.ts");
+    env.GOOGLE_GEOCODING_API_KEY = "chave-de-teste";
+    try {
+      const hosts = stubWithGoogle(() => Response.json(googleHit));
+      const p = await geocode({ city: "Tapejara Google", state: "PR" });
+      expect(p).toMatchObject({ source: "Google", latitude: -23.7334, label: "Tapejara Google, Paraná, Brasil" });
+      expect(hosts).toEqual(["maps.googleapis.com"]);
+    } finally {
+      env.GOOGLE_GEOCODING_API_KEY = "";
+    }
+  });
+
+  it("cota esgotada ou chave recusada no Google: segue pelo Nominatim", async () => {
+    const { env } = await import("../../src/config/env.ts");
+    env.GOOGLE_GEOCODING_API_KEY = "chave-de-teste";
+    try {
+      const hosts = stubWithGoogle(() => Response.json({ status: "OVER_QUERY_LIMIT" }));
+      const p = await geocode({ city: "Cidade Cota", state: "PR" });
+      expect(p.source).toBe("Nominatim");
+      expect(hosts).toEqual(["maps.googleapis.com", "nominatim.openstreetmap.org"]);
+    } finally {
+      env.GOOGLE_GEOCODING_API_KEY = "";
+    }
+  });
+});

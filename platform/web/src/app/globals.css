@@ -270,3 +270,18 @@
   font-weight: 500;
   color: var(--primary);
 }
+
+/* balão do mapa do Google: o fundo do InfoWindow é sempre branco */
+.gm-style .lead-popup {
+  color: #5f6368;
+}
+.gm-style .lead-popup strong {
+  color: #202124;
+}
+.gm-style .lead-popup a {
+  color: #1a73e8;
+}
+.lead-pin-google svg {
+  display: block;
+  cursor: pointer;
+}

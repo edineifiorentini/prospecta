@@ -14,6 +14,7 @@ import { webhookRoutes } from "./modules/messaging/webhook.ts";
 import { reportRoutes } from "./modules/reports/routes.ts";
 import { privacyRoutes } from "./modules/privacy/routes.ts";
 import { onboardingRoutes } from "./modules/onboarding/routes.ts";
+import { mapRoutes } from "./modules/maps/routes.ts";
 
 export const registerRoutes: FastifyPluginAsyncZod = async (app) => {
   await app.register(healthRoutes);
@@ -31,4 +32,5 @@ export const registerRoutes: FastifyPluginAsyncZod = async (app) => {
   await app.register(reportRoutes);
   await app.register(privacyRoutes);
   await app.register(onboardingRoutes);
+  await app.register(mapRoutes);
 };

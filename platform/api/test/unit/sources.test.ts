@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { accentInsensitive, buildOverpassAreaQuery, buildOverpassQuery, mapOsmElement, ufCode } from "../../src/modules/sources/overpass.ts";
-import { photonToPlace, pickPlace } from "../../src/modules/geo/geocode.ts";
+import { googleToPlace, photonToPlace, pickPlace } from "../../src/modules/geo/geocode.ts";
 import { planOsmQuery } from "../../src/modules/sources/osm-categories.ts";
 import { depthForLimit, mapGmapsRow } from "../../src/modules/sources/gmaps.ts";
 import { matchesFilters, searchFiltersSchema } from "../../src/modules/sources/types.ts";
@@ -51,6 +51,21 @@ describe("OpenStreetMap", () => {
     // com bairro, o ponto do bairro vence o da cidade
     const withSuburb: Hit[] = [...hits, { name: "Zona I", osm_type: "node", type: "suburb", addresstype: "suburb", lat: "-23.760" }];
     expect(pickPlace(withSuburb, { city: "Umuarama", neighborhood: "Zona I" }, d)?.lat).toBe("-23.760");
+  });
+
+  it("converte resultado da Geocoding API do Google", () => {
+    const p = googleToPlace({
+      types: ["locality", "political"],
+      geometry: { location: { lat: -23.7334, lng: -52.8702 }, viewport: { northeast: { lat: -23.72, lng: -52.85 }, southwest: { lat: -23.75, lng: -52.89 } } },
+      address_components: [
+        { long_name: "Tapejara", short_name: "Tapejara", types: ["locality", "political"] },
+        { long_name: "Paraná", short_name: "PR", types: ["administrative_area_level_1", "political"] },
+        { long_name: "Brasil", short_name: "BR", types: ["country", "political"] },
+      ],
+    });
+    expect(p).toMatchObject({ latitude: -23.7334, longitude: -52.8702, label: "Tapejara, Paraná, Brasil", source: "Google" });
+    expect(p.address).toMatchObject({ city: "Tapejara", state: "PR" });
+    expect(p.bbox).toEqual([-23.75, -23.72, -52.89, -52.85]);
   });
 
   it("converte resultado do Photon (geocodificador reserva)", () => {

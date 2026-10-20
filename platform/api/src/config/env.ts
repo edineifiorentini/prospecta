@@ -25,6 +25,12 @@ const schema = z.object({
   GMAPS_SCRAPER_ENABLED: bool,
   OVERPASS_URL: z.string().url().default("https://overpass-api.de/api/interpreter"),
   NOMINATIM_URL: z.string().url().default("https://nominatim.openstreetmap.org"),
+  /** chave do mapa do Google (Maps JavaScript API), restrita por site; vazia = mapa do OpenStreetMap */
+  GOOGLE_MAPS_API_KEY: z.string().trim().default(""),
+  /** ID de mapa do Google (marcadores avançados); vazio = DEMO_MAP_ID, liberado pelo Google para testes */
+  GOOGLE_MAPS_MAP_ID: z.string().trim().default(""),
+  /** chave de servidor para localizar cidades pelo Google (Geocoding API), restrita só por API; opcional */
+  GOOGLE_GEOCODING_API_KEY: z.string().trim().default(""),
   /** fontes de busca habilitadas, separadas por vírgula (padrão: só o Google Maps) */
   SEARCH_SOURCES: z.string().default("GOOGLE_MAPS_SCRAPER"),
   /** geocodificador reserva (Photon/komoot, dados do OpenStreetMap) */

@@ -72,7 +72,7 @@ No primeiro acesso, um **tour guiado** apresenta as telas principais. O roteiro 
    - Informe palavra-chave, cidade, bairro, raio e limite.
    - Fonte: Google Maps, pelo motor local do kit (gosom). Volumes altos e buscas seguidas podem bloquear o IP por um tempo, e a raspagem contraria os Termos do Google. O OpenStreetMap pode ser reativado com `SEARCH_SOURCES=GOOGLE_MAPS_SCRAPER,OSM_OVERPASS` no `.env`.
    - Também dá para importar uma planilha CSV.
-   - Como no kit original, o mapa mostra o local (pino azul) e o raio (círculo) enquanto você preenche a busca; nos resultados, cada empresa vira um pino (vermelho; verde se já está no CRM; cinza se ficou fora do raio). A ficha da empresa também mostra o ponto no mapa. Os mapas são do OpenStreetMap, sem chave nem custo.
+   - Como no kit original, o mapa mostra o local (pino azul) e o raio (círculo) enquanto você preenche a busca; nos resultados, cada empresa vira um pino (vermelho; verde se já está no CRM; cinza se ficou fora do raio). A ficha da empresa também mostra o ponto no mapa. Sem configuração, os mapas são do OpenStreetMap (sem chave nem custo); com `GOOGLE_MAPS_API_KEY` no `.env`, passam a ser do Google, com volta automática para o OpenStreetMap se o Google falhar. Passo a passo e custos em [docs/MANUTENCAO.md](docs/MANUTENCAO.md#mapa-do-google-opcional).
    - O andamento aparece em tempo real e os resultados são deduplicados.
 2. **Empresas**
    - Lista com filtros (sem site, sem telefone, nota, avaliações, cidade, segmento, pontuações), ações em lote, listas e exportação CSV.
@@ -131,8 +131,8 @@ Com `--apply --yes`, **substitui** o banco atual. Antes ele salva um backup de s
 
 | Suíte | Como rodar | Requisitos |
 |---|---|---|
-| Unitários (82) | `cd platform/api && npm run test:unit` | nenhum |
-| Integração (50) | `cd platform/api && npm run test:integration` | Postgres e Valkey publicados (modo desenvolvimento) e `platform/.env.dev`; usa o banco separado `prospecta_test` |
+| Unitários (83) | `cd platform/api && npm run test:unit` | nenhum |
+| Integração (52) | `cd platform/api && npm run test:integration` | Postgres e Valkey publicados (modo desenvolvimento) e `platform/.env.dev`; usa o banco separado `prospecta_test` |
 | Ponta a ponta (24) | `cd platform/e2e && npm install && npx playwright test` | pilha rodando em http://localhost:3000; usa o Edge instalado (`E2E_CHANNEL=chrome` para o Chrome) |
 
 Os testes E2E criam um usuário próprio (`e2e@prospecta.local`) com senha temporária e registros com o prefixo `[E2E]`; ao final, apagam esses registros e o próprio usuário.
