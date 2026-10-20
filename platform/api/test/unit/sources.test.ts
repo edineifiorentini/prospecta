@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildOverpassQuery, mapOsmElement } from "../../src/modules/sources/overpass.ts";
+import { accentInsensitive, buildOverpassAreaQuery, buildOverpassQuery, mapOsmElement, ufCode } from "../../src/modules/sources/overpass.ts";
+import { photonToPlace } from "../../src/modules/geo/geocode.ts";
 import { planOsmQuery } from "../../src/modules/sources/osm-categories.ts";
 import { depthForLimit, mapGmapsRow } from "../../src/modules/sources/gmaps.ts";
 import { matchesFilters, searchFiltersSchema } from "../../src/modules/sources/types.ts";
@@ -16,6 +17,36 @@ describe("OpenStreetMap", () => {
     const { query } = buildOverpassQuery("academia", -22.9, -47.06, 3000, 50);
     expect(query).toContain('nwr["leisure"="fitness_centre"](around:3000,-22.900000,-47.060000);');
     expect(query).toContain("out center tags qt 100;");
+  });
+
+  it("sem serviço de mapas, delimita pelo limite do município (UF e acentos tolerados)", () => {
+    expect(ufCode("Paraná")).toBe("PR");
+    expect(ufCode("pr")).toBe("PR");
+    expect(ufCode("Sao Paulo")).toBe("SP");
+    expect(ufCode("Ontario")).toBeNull();
+    const re = new RegExp(`^${accentInsensitive("Sao Joao")}$`, "i");
+    expect(re.test("São João")).toBe(true);
+    expect(re.test("Sao Joao")).toBe(true);
+
+    const { query } = buildOverpassAreaQuery("escola", { city: "Umuarama", state: "PR", country: "Brasil" }, 5000, 60);
+    expect(query).toContain('area["ISO3166-2"="BR-PR"]["admin_level"="4"]->.uf;');
+    expect(query).toContain('["admin_level"="8"]');
+    expect(query).toContain("map_to_area->.scope;");
+    expect(query).toContain('nwr["amenity"="school"](area.scope);');
+    expect(query).not.toContain("around:");
+
+    const bairro = buildOverpassAreaQuery("dentista", { city: "Campinas", state: "SP", neighborhood: "Cambuí" }, 3000, 20).query;
+    expect(bairro).toContain('["place"~"^(suburb|neighbourhood|quarter)$"]');
+    expect(bairro).toContain("(around.center:3000)");
+  });
+
+  it("converte resultado do Photon (geocodificador reserva)", () => {
+    const p = photonToPlace({
+      geometry: { coordinates: [-53.3116, -23.7621] },
+      properties: { name: "Umuarama", state: "Paraná", country: "Brasil", countrycode: "BR", type: "city", extent: [-53.66, -23.44, -53.17, -23.96] },
+    });
+    expect(p).toMatchObject({ latitude: -23.7621, longitude: -53.3116, label: "Umuarama, Paraná, Brasil", source: "Photon" });
+    expect(p.bbox).toEqual([-23.96, -23.44, -53.66, -53.17]);
   });
 
   it("escapa termos livres na busca por nome", () => {

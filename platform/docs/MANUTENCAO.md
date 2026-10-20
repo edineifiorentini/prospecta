@@ -74,6 +74,18 @@ Use apenas números de teste autorizados.
 
 **Uso comercial em escala.** Migre para a WhatsApp Business Cloud API (adaptador `messaging/cloud-api.ts`), com modelos aprovados pela Meta.
 
+## Localização e servidores do OpenStreetMap
+
+As buscas usam serviços públicos e gratuitos, que às vezes ficam instáveis.
+
+| Serviço | Para que serve | Se estiver fora do ar |
+|---|---|---|
+| Nominatim | Achar o centro da cidade ou do bairro | A plataforma tenta o Photon (`PHOTON_URL`), que também usa dados do OpenStreetMap |
+| Photon | Reserva do Nominatim | Como no kit original, a busca segue pelo nome do local: no Google Maps o lugar vai no texto ("escola em Umuarama, PR"); no OpenStreetMap a área vem do limite oficial do município (mais lento) |
+| Overpass | Consultar estabelecimentos no OpenStreetMap | Tenta 4 vezes, alternando entre overpass-api.de, overpass.private.coffee e overpass.kumi.systems; se todos falharem, use **Repetir** mais tarde ou faça a busca pelo Google Maps |
+
+O formulário de busca mostra um aviso amarelo quando o mapa não localiza o lugar, mas a busca não é bloqueada.
+
 ## Motor do Google Maps (opcional)
 
 - Contraria os Termos do Google; prefira o OpenStreetMap.

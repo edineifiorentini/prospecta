@@ -146,5 +146,6 @@ Princípios:
 | Mailpit | E-mail transacional de teste local; troque `SMTP_URL` para um provedor real |
 | OpenStreetMap como fonte padrão | Gratuito e de uso permitido. O Google Maps Scraper é opcional, com avisos. |
 | BrasilAPI | Consulta pública de CNPJ |
+| Photon como reserva do Nominatim | Geocodificador gratuito com dados do OpenStreetMap; sem nenhum dos dois, a busca segue pelo nome do local (modelo do kit original) |
 | Lighthouse local | No lugar da API PageSpeed, que exige chave |
 | WuzAPI para testes | Adaptador da WhatsApp Business Cloud API pronto para uso oficial |

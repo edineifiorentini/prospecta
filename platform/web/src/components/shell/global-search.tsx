@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Building2, CheckSquare, KanbanSquare, Search } from "lucide-react";
 import {
+  Command,
   CommandDialog,
   CommandEmpty,
   CommandGroup,
@@ -22,6 +23,8 @@ type GlobalResult = {
   deals: { id: string; title: string; companyId: string; stage: string }[];
   tasks: { id: string; title: string; companyId: string | null }[];
 };
+
+const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 function useDebounced<T>(value: T, ms = 220) {
   const [v, setV] = useState(value);
@@ -56,6 +59,9 @@ export function GlobalSearch() {
     staleTime: 10_000,
   });
 
+  // os resultados já vêm filtrados do servidor (nome, telefone, domínio); aqui só os atalhos de página são filtrados
+  const pages = [...NAV_MAIN, ...NAV_FOOTER].filter((n) => !q.trim() || fold(n.label).includes(fold(q.trim())));
+
   const go = (href: string) => {
     setOpen(false);
     setQ("");
@@ -76,6 +82,8 @@ export function GlobalSearch() {
         <kbd className="ml-auto hidden rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px] sm:inline">Ctrl K</kbd>
       </Button>
       <CommandDialog open={open} onOpenChange={setOpen} title="Busca global" description="Pesquise empresas, negociações, tarefas e páginas">
+        {/* nesta versão do shadcn o CommandDialog não inclui o Command raiz; sem ele o cmdk quebra ao abrir */}
+        <Command shouldFilter={false}>
         <CommandInput placeholder="Digite para buscar…" value={q} onValueChange={setQ} />
         <CommandList>
           <CommandEmpty>{query.length < 2 ? "Digite ao menos 2 caracteres." : isFetching ? "Buscando…" : "Nada encontrado."}</CommandEmpty>
@@ -111,16 +119,21 @@ export function GlobalSearch() {
               ))}
             </CommandGroup>
           )}
-          <CommandSeparator />
-          <CommandGroup heading="Ir para">
-            {[...NAV_MAIN, ...NAV_FOOTER].map((n) => (
-              <CommandItem key={n.href} value={`nav-${n.label}`} onSelect={() => go(n.href)}>
-                <n.icon />
-                {n.label}
-              </CommandItem>
-            ))}
-          </CommandGroup>
+          {pages.length > 0 && (
+            <>
+              <CommandSeparator />
+              <CommandGroup heading="Ir para">
+                {pages.map((n) => (
+                  <CommandItem key={n.href} value={`nav-${n.label}`} onSelect={() => go(n.href)}>
+                    <n.icon />
+                    {n.label}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </>
+          )}
         </CommandList>
+        </Command>
       </CommandDialog>
     </>
   );

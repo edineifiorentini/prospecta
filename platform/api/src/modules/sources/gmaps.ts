@@ -1,7 +1,7 @@
 import { parse } from "csv-parse/sync";
 import { env } from "../../config/env.ts";
 import { safeHttpUrl, splitList } from "../../lib/normalize.ts";
-import { geocode, zoomForRadius } from "../geo/geocode.ts";
+import { tryGeocode, zoomForRadius } from "../geo/geocode.ts";
 import { CancelledError, type AdapterContext, type DiscoveredCompany, type DiscoveryAdapter } from "./types.ts";
 
 /**
@@ -108,7 +108,11 @@ export const gmapsAdapter: DiscoveryAdapter = {
   async run(ctx: AdapterContext) {
     const p = ctx.params;
     await ctx.progress({ phase: "geocoding", message: "Localizando a área de busca…" });
-    const place = await geocode({ country: p.country, state: p.state, city: p.city, neighborhood: p.neighborhood });
+    // como no kit original: o lugar vai no texto da busca ("dentista em Cambuí, Campinas, SP");
+    // as coordenadas só centralizam o mapa e, sem elas, a busca segue pelo texto
+    const geo = await tryGeocode({ country: p.country, state: p.state, city: p.city, neighborhood: p.neighborhood });
+    if (!geo.place) await ctx.progress({ phase: "geocoding", message: `${geo.problem.message} A busca segue pelo nome do local, como no kit original.` });
+    const place = geo.place;
     const where = [p.neighborhood, p.city, p.state].filter(Boolean).join(", ");
     const joiner = p.lang === "en" ? "in" : p.lang === "es" ? "en" : "em";
     const keyword = `${p.nameContains ? `${p.keyword} ${p.nameContains}` : p.keyword} ${joiner} ${where}`;
@@ -119,9 +123,9 @@ export const gmapsAdapter: DiscoveryAdapter = {
       name: `prospecta:${ctx.searchJobId}`,
       keywords: [keyword],
       lang: p.lang,
-      zoom: zoomForRadius(p.radiusKm),
-      lat: place.latitude.toFixed(6),
-      lon: place.longitude.toFixed(6),
+      zoom: place ? zoomForRadius(p.radiusKm) : 14,
+      lat: place ? place.latitude.toFixed(6) : "0",
+      lon: place ? place.longitude.toFixed(6) : "0",
       radius: Math.round(p.radiusKm * 1000),
       depth,
       email: p.extractEmails,

@@ -1,8 +1,9 @@
 import { env } from "../../config/env.ts";
 import { prisma } from "../../lib/prisma.ts";
 import { redis } from "../../lib/redis.ts";
-import { unprocessable, unavailable } from "../../lib/errors.ts";
+import { AppError, unprocessable, unavailable } from "../../lib/errors.ts";
 import { fold } from "../../lib/normalize.ts";
+import { logger } from "../../lib/logger.ts";
 
 export type GeoPlace = {
   latitude: number;
@@ -11,6 +12,8 @@ export type GeoPlace = {
   /** [sul, norte, oeste, leste] */
   bbox?: [number, number, number, number];
   address?: Record<string, string>;
+  /** serviço que localizou (Nominatim, Photon ou cache) */
+  source?: string;
 };
 
 export type LocationInput = { country?: string; state?: string; city?: string; neighborhood?: string };
@@ -18,16 +21,90 @@ export type LocationInput = { country?: string; state?: string; city?: string; n
 export const locationText = (l: LocationInput) =>
   [l.neighborhood, l.city, l.state, l.country].map((s) => s?.trim()).filter(Boolean).join(", ");
 
-/** Política do Nominatim: no máximo 1 requisição por segundo, com User-Agent identificável. */
-async function waitNominatimSlot() {
+export const isBrazil = (country?: string) => !country?.trim() || /^(bra[sz]il|br)$/i.test(country.trim());
+
+/** Falha do serviço (fora do ar, limite, rede) — diferente de "local não encontrado". */
+class ServiceDown extends Error {}
+
+/** Respeita no máximo 1 requisição por segundo por serviço (política do Nominatim; boa prática no Photon). */
+async function waitSlot(service: string) {
   for (let i = 0; i < 20; i++) {
-    const ok = await redis.set("pp:nominatim:slot", "1", "PX", 1100, "NX");
-    if (ok) return;
+    if (await redis.set(`pp:geo:slot:${service}`, "1", "PX", 1100, "NX")) return;
     await new Promise((r) => setTimeout(r, 300));
   }
-  throw unavailable("Serviço de geocodificação ocupado. Tente novamente em instantes.");
+  throw new ServiceDown("ocupado");
 }
 
+async function getJson<T>(url: URL): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: { "User-Agent": env.HTTP_USER_AGENT, Accept: "application/json" }, signal: AbortSignal.timeout(12_000) });
+  } catch (err) {
+    throw new ServiceDown((err as Error).name === "TimeoutError" ? "tempo esgotado" : "sem conexão");
+  }
+  if (!res.ok) throw new ServiceDown(`HTTP ${res.status}`);
+  try {
+    return (await res.json()) as T;
+  } catch {
+    throw new ServiceDown("resposta inválida");
+  }
+}
+
+type NominatimHit = { lat: string; lon: string; display_name: string; boundingbox?: string[]; address?: Record<string, string> };
+
+async function nominatim(text: string, input: LocationInput): Promise<GeoPlace | null> {
+  await waitSlot("nominatim");
+  const url = new URL("/search", env.NOMINATIM_URL);
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("accept-language", "pt-BR");
+  url.searchParams.set("q", text);
+  if (isBrazil(input.country)) url.searchParams.set("countrycodes", "br");
+  const hit = (await getJson<NominatimHit[]>(url))[0];
+  if (!hit) return null;
+  const a = hit.address ?? {};
+  const label =
+    [a.suburb ?? a.neighbourhood ?? a.city_district ?? a.quarter, a.city ?? a.town ?? a.village ?? a.municipality, a.state, a.country].filter(Boolean).join(", ") ||
+    hit.display_name;
+  return { latitude: Number(hit.lat), longitude: Number(hit.lon), label, bbox: hit.boundingbox?.map(Number) as GeoPlace["bbox"], address: a, source: "Nominatim" };
+}
+
+export type PhotonFeature = {
+  geometry: { coordinates: [number, number] };
+  properties: { name?: string; city?: string; district?: string; locality?: string; state?: string; country?: string; countrycode?: string; type?: string; extent?: [number, number, number, number] };
+};
+
+/** Converte um resultado do Photon (GeoJSON; extent = [oeste, norte, leste, sul]). */
+export function photonToPlace(f: PhotonFeature): GeoPlace {
+  const p = f.properties;
+  const [lon, lat] = f.geometry.coordinates;
+  const label = [...new Set([p.name, p.type === "city" ? undefined : p.city, p.state, p.country].filter(Boolean))].join(", ");
+  const bbox = p.extent ? ([p.extent[3], p.extent[1], p.extent[0], p.extent[2]] as GeoPlace["bbox"]) : undefined;
+  return { latitude: lat, longitude: lon, label, bbox, address: { city: p.city ?? (p.type === "city" ? p.name ?? "" : ""), state: p.state ?? "", country: p.country ?? "" }, source: "Photon" };
+}
+
+async function photon(text: string, input: LocationInput): Promise<GeoPlace | null> {
+  await waitSlot("photon");
+  const url = new URL("/api/", env.PHOTON_URL);
+  url.searchParams.set("q", text);
+  url.searchParams.set("limit", "5");
+  // Photon não filtra por país: limita ao retângulo do Brasil quando a busca é nacional
+  if (isBrazil(input.country)) url.searchParams.set("bbox", "-74.1,-33.9,-28.8,5.4");
+  const json = await getJson<{ features?: PhotonFeature[] }>(url);
+  const features = (json.features ?? []).filter((f) => !isBrazil(input.country) || f.properties.countrycode?.toUpperCase() === "BR");
+  return features[0] ? photonToPlace(features[0]) : null;
+}
+
+const PROVIDERS: [string, (text: string, input: LocationInput) => Promise<GeoPlace | null>][] = [
+  ["Nominatim", nominatim],
+  ["Photon", photon],
+];
+
+/**
+ * Localiza o endereço da busca: Nominatim primeiro e Photon como reserva (ambos com dados do OpenStreetMap).
+ * Lança 422 se nenhum serviço encontrou o lugar e 503 se todos estiverem fora do ar.
+ */
 export async function geocode(input: LocationInput): Promise<GeoPlace> {
   const text = locationText(input);
   if (!text) throw unprocessable("Informe ao menos a cidade.");
@@ -36,41 +113,40 @@ export async function geocode(input: LocationInput): Promise<GeoPlace> {
   const cached = await prisma.geocodeCache.findUnique({ where: { query: key } });
   if (cached) {
     const raw = (cached.raw ?? {}) as { bbox?: [number, number, number, number]; address?: Record<string, string> };
-    return { latitude: cached.latitude, longitude: cached.longitude, label: cached.label, bbox: raw.bbox, address: raw.address };
+    return { latitude: cached.latitude, longitude: cached.longitude, label: cached.label, bbox: raw.bbox, address: raw.address, source: "cache" };
   }
 
-  await waitNominatimSlot();
-  const url = new URL("/search", env.NOMINATIM_URL);
-  url.searchParams.set("format", "jsonv2");
-  url.searchParams.set("limit", "1");
-  url.searchParams.set("addressdetails", "1");
-  url.searchParams.set("accept-language", "pt-BR");
-  url.searchParams.set("q", text);
-  if (!input.country || /^bra[sz]il$/i.test(input.country.trim())) url.searchParams.set("countrycodes", "br");
+  const down: string[] = [];
+  for (const [name, provider] of PROVIDERS) {
+    try {
+      const place = await provider(text, input);
+      if (!place) continue;
+      await prisma.geocodeCache
+        .create({ data: { query: key, latitude: place.latitude, longitude: place.longitude, label: place.label, raw: { bbox: place.bbox, address: place.address, source: place.source } } })
+        .catch(() => undefined);
+      return place;
+    } catch (err) {
+      if (!(err instanceof ServiceDown)) throw err;
+      down.push(`${name}: ${err.message}`);
+      logger.warn({ provider: name, reason: err.message }, "geocodificador indisponível");
+    }
+  }
+  if (down.length === PROVIDERS.length) throw unavailable(`Serviço de mapas indisponível no momento (${down.join("; ")}).`);
+  throw unprocessable(`Local não encontrado no mapa: "${text}". Revise cidade, estado e bairro.`);
+}
 
-  let res: Response;
+export type GeoAttempt = { place: GeoPlace; problem?: undefined } | { place: null; problem: { kind: "unavailable" | "not_found"; message: string } };
+
+/** Como no kit original: a falta de coordenadas não impede a busca — quem chama decide como seguir só com o texto. */
+export async function tryGeocode(input: LocationInput): Promise<GeoAttempt> {
   try {
-    res = await fetch(url, { headers: { "User-Agent": env.HTTP_USER_AGENT, Accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
-  } catch {
-    throw unavailable("Não foi possível consultar o serviço de mapas (Nominatim/OpenStreetMap).");
+    return { place: await geocode(input) };
+  } catch (err) {
+    if (err instanceof AppError && (err.statusCode === 503 || err.statusCode === 422)) {
+      return { place: null, problem: { kind: err.statusCode === 503 ? "unavailable" : "not_found", message: err.message } };
+    }
+    throw err;
   }
-  if (!res.ok) throw unavailable(`Geocodificação indisponível (HTTP ${res.status}).`);
-  const hits = (await res.json()) as Array<{ lat: string; lon: string; display_name: string; boundingbox?: string[]; address?: Record<string, string> }>;
-  const hit = hits[0];
-  if (!hit) throw unprocessable(`Local não encontrado: "${text}". Revise cidade, estado e bairro.`);
-
-  const a = hit.address ?? {};
-  const label =
-    [a.suburb ?? a.neighbourhood ?? a.city_district ?? a.quarter, a.city ?? a.town ?? a.village ?? a.municipality, a.state, a.country]
-      .filter(Boolean)
-      .join(", ") || hit.display_name;
-  const bbox = hit.boundingbox?.map(Number) as [number, number, number, number] | undefined;
-  const place: GeoPlace = { latitude: Number(hit.lat), longitude: Number(hit.lon), label, bbox, address: a };
-
-  await prisma.geocodeCache
-    .create({ data: { query: key, latitude: place.latitude, longitude: place.longitude, label, raw: { bbox, address: a } } })
-    .catch(() => undefined);
-  return place;
 }
 
 /** Zoom aproximado do Google Maps para cobrir um raio (km). */

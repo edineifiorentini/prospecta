@@ -55,6 +55,23 @@ test("move a negociação entre etapas arrastando no kanban", async ({ page }) =
   await expect(page.getByRole("region", { name: "Etapa Novo lead" }).getByText(name)).toHaveCount(0);
 });
 
+test("busca global (Ctrl+K) encontra a empresa e abre a ficha", async ({ page }) => {
+  await page.goto("/dashboard");
+  await page.keyboard.press("Control+k");
+  const dialog = page.getByRole("dialog", { name: "Busca global" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByPlaceholder("Digite para buscar…").fill(name.slice(PREFIX.length + 1));
+  // o nome aparece em Empresas e em Negociações (título da negociação); o primeiro é a empresa
+  await dialog.getByRole("option", { name: new RegExp(name.replace(/[[\]]/g, "\\$&")) }).first().click();
+  await expect(page).toHaveURL(/\/empresas\/[0-9a-f-]{36}/);
+  await expect(page.getByRole("heading", { name })).toBeVisible();
+  // atalhos de página também filtram pelo texto
+  await page.keyboard.press("Control+k");
+  await page.getByPlaceholder("Digite para buscar…").fill("relat");
+  await expect(page.getByRole("option", { name: "Relatórios" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Tarefas" })).toHaveCount(0);
+});
+
 test("a ficha registra a mudança de etapa na linha do tempo", async ({ page }) => {
   await page.goto("/empresas");
   await page.getByPlaceholder(/Nome, domínio, telefone/).fill(name);

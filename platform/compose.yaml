@@ -22,6 +22,7 @@ x-api-env: &api-env
   GMAPS_SCRAPER_ENABLED: ${GMAPS_SCRAPER_ENABLED:-true}
   OVERPASS_URL: ${OVERPASS_URL:-https://overpass-api.de/api/interpreter}
   NOMINATIM_URL: ${NOMINATIM_URL:-https://nominatim.openstreetmap.org}
+  PHOTON_URL: ${PHOTON_URL:-https://photon.komoot.io}
   HTTP_USER_AGENT: ${HTTP_USER_AGENT:-ProspectaBot/0.1 (+local; contato via administrador)}
   WUZAPI_URL: http://wuzapi:8080
   WUZAPI_ADMIN_TOKEN: ${WUZAPI_ADMIN_TOKEN:?defina WUZAPI_ADMIN_TOKEN no .env}

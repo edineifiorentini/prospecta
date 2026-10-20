@@ -18,7 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Field } from "@/components/form-field";
 import { TriStateFilter } from "@/components/tri-state";
-import { api, errorMessage } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import type { Source } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -93,12 +93,23 @@ export function SearchForm() {
     const t = setTimeout(() => {
       api<{ label: string; latitude: number; longitude: number }>("/geocode", { method: "POST", body: { city, state: state || undefined, neighborhood: neighborhood || undefined, country } })
         .then((geo) => setGeoResult({ key: geoKey, geo }))
-        .catch((e) => setGeoResult({ key: geoKey, error: errorMessage(e) }));
+        // como no kit original, a localização só ajuda a centralizar: sem ela a busca segue pelo nome do local
+        .catch((e) =>
+          setGeoResult({
+            key: geoKey,
+            error:
+              e instanceof ApiError && e.status === 503
+                ? "Mapa indisponível agora. A busca segue pelo nome do local (no OpenStreetMap, pelo limite do município)."
+                : e instanceof ApiError && e.status === 422
+                  ? "Não achei esse lugar no mapa. Confira cidade e estado; a busca seguirá pelo texto informado."
+                  : `${errorMessage(e)} A busca seguirá pelo nome do local.`,
+          }),
+        );
     }, 900);
     return () => clearTimeout(t);
   }, [geoKey, city, state, neighborhood, country]);
   const geo = geoResult?.key === geoKey ? (geoResult.geo ?? null) : null;
-  const geoError = geoResult?.key === geoKey ? (geoResult.error ?? null) : null;
+  const geoWarning = geoResult?.key === geoKey ? (geoResult.error ?? null) : null;
 
   const create = useMutation({
     mutationFn: (v: z.output<typeof schema>) => {
@@ -205,9 +216,9 @@ export function SearchForm() {
           <Input id="neighborhood" placeholder="Cambuí" {...form.register("neighborhood")} />
         </Field>
       </div>
-      <p className={cn("-mt-2 flex items-center gap-1.5 text-xs", geoError ? "text-destructive" : "text-muted-foreground")} aria-live="polite">
+      <p className={cn("-mt-2 flex items-center gap-1.5 text-xs", geoWarning ? "text-[color-mix(in_oklch,var(--warning),black_30%)] dark:text-warning" : "text-muted-foreground")} aria-live="polite">
         <MapPin className="size-3.5" />
-        {geoError ?? (geo ? `${geo.label} · ${geo.latitude.toFixed(4)}, ${geo.longitude.toFixed(4)}` : city ? "Localizando…" : "Informe a cidade para localizar a área de busca.")}
+        {geoWarning ?? (geo ? `${geo.label} · ${geo.latitude.toFixed(4)}, ${geo.longitude.toFixed(4)}` : city ? "Localizando…" : "Informe a cidade para localizar a área de busca.")}
       </p>
 
       <div className="grid gap-5 sm:grid-cols-3">
