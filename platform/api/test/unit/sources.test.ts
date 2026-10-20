@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { accentInsensitive, buildOverpassAreaQuery, buildOverpassQuery, mapOsmElement, ufCode } from "../../src/modules/sources/overpass.ts";
-import { photonToPlace } from "../../src/modules/geo/geocode.ts";
+import { photonToPlace, pickPlace } from "../../src/modules/geo/geocode.ts";
 import { planOsmQuery } from "../../src/modules/sources/osm-categories.ts";
 import { depthForLimit, mapGmapsRow } from "../../src/modules/sources/gmaps.ts";
 import { matchesFilters, searchFiltersSchema } from "../../src/modules/sources/types.ts";
@@ -38,6 +38,19 @@ describe("OpenStreetMap", () => {
     const bairro = buildOverpassAreaQuery("dentista", { city: "Campinas", state: "SP", neighborhood: "Cambuí" }, 3000, 20).query;
     expect(bairro).toContain('["place"~"^(suburb|neighbourhood|quarter)$"]');
     expect(bairro).toContain("(around.center:3000)");
+  });
+
+  it("prefere o ponto da cidade ao centro do município (caso Tapejara-PR)", () => {
+    type Hit = { name: string; osm_type: string; type: string; addresstype: string; lat: string };
+    const hits: Hit[] = [
+      { name: "Tapejara", osm_type: "relation", type: "administrative", addresstype: "municipality", lat: "-23.642" },
+      { name: "Tapejara", osm_type: "node", type: "town", addresstype: "town", lat: "-23.733" },
+    ];
+    const d = (h: Hit) => ({ name: h.name, isPoint: h.osm_type === "node", kinds: [h.type, h.addresstype] });
+    expect(pickPlace(hits, { city: "Tapejara", state: "PR" }, d)?.lat).toBe("-23.733");
+    // com bairro, o ponto do bairro vence o da cidade
+    const withSuburb: Hit[] = [...hits, { name: "Zona I", osm_type: "node", type: "suburb", addresstype: "suburb", lat: "-23.760" }];
+    expect(pickPlace(withSuburb, { city: "Umuarama", neighborhood: "Zona I" }, d)?.lat).toBe("-23.760");
   });
 
   it("converte resultado do Photon (geocodificador reserva)", () => {

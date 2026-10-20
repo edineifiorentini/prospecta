@@ -42,7 +42,7 @@ export function SystemSettings() {
             Motor de coleta <a className="text-primary hover:underline" href="https://github.com/gosom/google-maps-scraper" target="_blank" rel="noopener noreferrer">google-maps-scraper</a> — Georgios Komninos (MIT).
           </li>
           <li>Kit de instalação google-maps-scraper-kit (MIT) — base deste fork.</li>
-          <li>Dados de mapas © colaboradores do OpenStreetMap (ODbL 1.0); geocodificação via Nominatim.</li>
+          <li>Desenho dos mapas e localização das cidades © colaboradores do OpenStreetMap (ODbL 1.0), via Nominatim e Photon; empresas pesquisadas no Google Maps pelo motor gosom.</li>
           <li>
             WhatsApp via <a className="text-primary hover:underline" href="https://github.com/asternic/wuzapi" target="_blank" rel="noopener noreferrer">WuzAPI</a> (MIT) — solução não oficial; para uso comercial em escala, prefira a API oficial.
           </li>

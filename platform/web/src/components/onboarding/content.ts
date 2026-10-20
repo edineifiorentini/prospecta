@@ -37,7 +37,7 @@ export const GUIDE: GuideStep[] = [
     why: "É daqui que saem os leads: uma busca por tipo de negócio e cidade traz empresas reais, com a origem de cada dado.",
     how: [
       "Abra Encontrar Empresas, informe o tipo de negócio (ex.: dentista) e a cidade.",
-      "Use o OpenStreetMap, gratuito e liberado; o Google Maps é opcional e pode bloquear seu IP por um tempo.",
+      "A busca usa o Google Maps pelo motor local do kit original; o mapa ao lado mostra o local e o raio.",
       "Comece com limite pequeno (20–50) e acompanhe o andamento à direita.",
     ],
     href: "/buscar",
@@ -194,7 +194,7 @@ export const TOUR: TourStep[] = [
     route: "/buscar",
     targets: ["search-form"],
     title: "Encontrar empresas",
-    body: "Informe o tipo de negócio e a cidade; o mapa mostra o local e o raio da busca. O OpenStreetMap é gratuito e liberado; o Google Maps é opcional e pode bloquear seu IP temporariamente. Também dá para importar uma planilha CSV.",
+    body: "Informe o tipo de negócio e a cidade; o mapa mostra o local e o raio da busca. A pesquisa é feita no Google Maps: use limites pequenos, porque buscas grandes e seguidas podem bloquear seu IP por um tempo. Também dá para importar uma planilha CSV.",
   },
   { route: "/buscar", targets: ["search-jobs"], title: "Andamento das buscas", body: "Cada busca roda em segundo plano. Acompanhe aqui e abra os resultados; empresas repetidas são unificadas automaticamente." },
   {

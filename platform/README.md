@@ -70,7 +70,7 @@ No primeiro acesso, um **tour guiado** apresenta as telas principais. O roteiro 
 
 1. **Encontrar empresas** (*Encontrar Empresas*)
    - Informe palavra-chave, cidade, bairro, raio e limite.
-   - Fontes: OpenStreetMap, ou o Google Maps Scraper (opcional, sujeito a bloqueio de IP pelo Google e contrário aos Termos do Google).
+   - Fonte: Google Maps, pelo motor local do kit (gosom). Volumes altos e buscas seguidas podem bloquear o IP por um tempo, e a raspagem contraria os Termos do Google. O OpenStreetMap pode ser reativado com `SEARCH_SOURCES=GOOGLE_MAPS_SCRAPER,OSM_OVERPASS` no `.env`.
    - Também dá para importar uma planilha CSV.
    - Como no kit original, o mapa mostra o local (pino azul) e o raio (círculo) enquanto você preenche a busca; nos resultados, cada empresa vira um pino (vermelho; verde se já está no CRM; cinza se ficou fora do raio). A ficha da empresa também mostra o ponto no mapa. Os mapas são do OpenStreetMap, sem chave nem custo.
    - O andamento aparece em tempo real e os resultados são deduplicados.
@@ -131,8 +131,8 @@ Com `--apply --yes`, **substitui** o banco atual. Antes ele salva um backup de s
 
 | Suíte | Como rodar | Requisitos |
 |---|---|---|
-| Unitários (81) | `cd platform/api && npm run test:unit` | nenhum |
-| Integração (47) | `cd platform/api && npm run test:integration` | Postgres e Valkey publicados (modo desenvolvimento) e `platform/.env.dev`; usa o banco separado `prospecta_test` |
+| Unitários (82) | `cd platform/api && npm run test:unit` | nenhum |
+| Integração (50) | `cd platform/api && npm run test:integration` | Postgres e Valkey publicados (modo desenvolvimento) e `platform/.env.dev`; usa o banco separado `prospecta_test` |
 | Ponta a ponta (24) | `cd platform/e2e && npm install && npx playwright test` | pilha rodando em http://localhost:3000; usa o Edge instalado (`E2E_CHANNEL=chrome` para o Chrome) |
 
 Os testes E2E criam um usuário próprio (`e2e@prospecta.local`) com senha temporária e registros com o prefixo `[E2E]`; ao final, apagam esses registros e o próprio usuário.
@@ -159,7 +159,7 @@ Não deixe os containers `platform-api` e `platform-worker` rodando junto com os
 ## Limites e responsabilidades
 
 - Raspagem do Google Maps contraria os Termos do Google. O adaptador é opcional, avisa sobre os riscos e não contorna CAPTCHA, login ou bloqueios.
-- Prefira o OpenStreetMap e use volumes pequenos.
+- Use volumes pequenos, uma busca por vez e, para uso intenso, proxies.
 - Número de telefone público **não é autorização** para iniciar conversas no WhatsApp.
 - Dados de contato são dados pessoais: registre a base legal, atenda pedidos de titulares e mantenha os prazos de retenção.
 - Pontuações são estimativas internas baseadas em evidências e não equivalem a avaliações oficiais de terceiros.

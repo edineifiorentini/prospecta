@@ -47,7 +47,7 @@ Todos os serviços estão no Docker Compose (projeto `prospecta`). O `docker-com
 |---|---|
 | `auth` | Login, sessão, CSRF, perfis, troca e recuperação de senha, senha temporária |
 | `orgs` | Organização, configurações, etapas padrão do funil, usuários e convites |
-| `sources` | Adaptadores de descoberta: OpenStreetMap (Overpass), Google Maps Scraper (gosom) e CSV |
+| `sources` | Adaptadores de descoberta: Google Maps (gosom, padrão), OpenStreetMap/Overpass (desativado por padrão, `SEARCH_SOURCES`) e CSV |
 | `search` | Fila de buscas, andamento, deduplicação e gravação dos resultados |
 | `companies` | Ficha da empresa, contatos, procedência por campo, listas, etiquetas, exportação |
 | `enrichment` | Crawler do site oficial, extração e verificação de contatos, redes e CNPJ |
@@ -144,7 +144,8 @@ Princípios:
 |---|---|
 | Valkey (BSD) | No lugar do Redis, por causa da licença; compatível com o BullMQ |
 | Mailpit | E-mail transacional de teste local; troque `SMTP_URL` para um provedor real |
-| OpenStreetMap como fonte padrão | Gratuito e de uso permitido. O Google Maps Scraper é opcional, com avisos. |
+| Google Maps como fonte de busca | Escolha do usuário: trouxe resultados onde o OpenStreetMap não tinha cadastro (cidades menores). O OpenStreetMap continua disponível por configuração (`SEARCH_SOURCES`). |
+| Mapas e localização do OpenStreetMap | O desenho do mapa (Leaflet) e a localização das cidades usam dados abertos, sem chave; o mapa do Google exigiria chave de API com cobrança |
 | BrasilAPI | Consulta pública de CNPJ |
 | Photon como reserva do Nominatim | Geocodificador gratuito com dados do OpenStreetMap; sem nenhum dos dois, a busca segue pelo nome do local (modelo do kit original) |
 | Lighthouse local | No lugar da API PageSpeed, que exige chave |

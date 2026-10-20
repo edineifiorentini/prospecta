@@ -60,6 +60,15 @@ const LIMITS = [10, 20, 40, 60, 100, 200, 300, 500];
 /** O que o mapa da página mostra enquanto o formulário é preenchido. */
 export type AreaPreview = { area: MapArea | null; message: string | null };
 
+const RISK_KEY = "prospecta:gmaps-risk-accepted";
+function readRiskAccepted() {
+  try {
+    return window.localStorage.getItem(RISK_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPreview) => void }) {
   const router = useRouter();
   const qc = useQueryClient();
@@ -69,7 +78,7 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
-      provider: "OSM_OVERPASS",
+      provider: "GOOGLE_MAPS_SCRAPER",
       keyword: "",
       nameContains: "",
       country: "Brasil",
@@ -85,6 +94,10 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
       acceptRisk: false,
     },
   });
+  // o aceite do aviso fica lembrado neste navegador (o aviso continua visível); lido após montar para não divergir do HTML do servidor
+  useEffect(() => {
+    if (readRiskAccepted()) form.setValue("acceptRisk", true);
+  }, [form]);
   const provider = useWatch({ control: form.control, name: "provider" });
   const [city, state, neighborhood, country, radiusKm] = useWatch({ control: form.control, name: ["city", "state", "neighborhood", "country", "radiusKm"] });
 
@@ -103,7 +116,7 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
             key: geoKey,
             error:
               e instanceof ApiError && e.status === 503
-                ? "Mapa indisponível agora. A busca segue pelo nome do local (no OpenStreetMap, pelo limite do município)."
+                ? "Mapa indisponível agora. A busca segue pelo nome do local, que vai no texto da pesquisa do Google Maps."
                 : e instanceof ApiError && e.status === 422
                   ? "Não achei esse lugar no mapa. Confira cidade e estado; a busca seguirá pelo texto informado."
                   : `${errorMessage(e)} A busca seguirá pelo nome do local.`,
@@ -143,10 +156,13 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
   const errors = form.formState.errors;
   const gmaps = sources.data?.find((s) => s.id === "GOOGLE_MAPS_SCRAPER");
   const osm = sources.data?.find((s) => s.id === "OSM_OVERPASS");
+  // com uma só fonte habilitada (padrão: Google Maps), não há o que escolher
+  const choose = !!gmaps && !!osm;
 
   return (
     <form onSubmit={onSubmit} className="grid gap-5" noValidate>
       {/* Fonte */}
+      {choose ? (
       <fieldset className="grid gap-2">
         <legend className="mb-1.5 text-[13px] font-medium">Fonte de dados</legend>
         <Controller
@@ -187,6 +203,17 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
           )}
         />
       </fieldset>
+      ) : (
+        <div className="flex items-center gap-3 rounded-xl border bg-card px-3.5 py-3">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+            <MapPin className="size-4" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-medium">Google Maps</span>
+            <span className="block text-xs text-muted-foreground">{gmaps && !gmaps.available ? gmaps.reason : "Motor local gosom (o mesmo do kit original). Use com moderação."}</span>
+          </span>
+        </div>
+      )}
 
       {provider === "GOOGLE_MAPS_SCRAPER" && (
         <Alert className="border-warning/40 bg-warning-soft/60">
@@ -195,7 +222,23 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
           <AlertDescription className="text-[13px]">
             {gmaps?.warning}
             <label className="mt-2 flex cursor-pointer items-center gap-2 font-medium text-foreground">
-              <Controller control={form.control} name="acceptRisk" render={({ field }) => <Checkbox checked={field.value} onCheckedChange={(v) => field.onChange(!!v)} />} />
+              <Controller
+                control={form.control}
+                name="acceptRisk"
+                render={({ field }) => (
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={(v) => {
+                      field.onChange(!!v);
+                      try {
+                        window.localStorage.setItem(RISK_KEY, v ? "1" : "0");
+                      } catch {
+                        /* armazenamento indisponível: só não lembra a escolha */
+                      }
+                    }}
+                  />
+                )}
+              />
               Li o aviso e assumo o uso desta fonte
             </label>
             {errors.acceptRisk && <span className="mt-1 block text-xs text-destructive">{errors.acceptRisk.message}</span>}

@@ -25,6 +25,8 @@ const schema = z.object({
   GMAPS_SCRAPER_ENABLED: bool,
   OVERPASS_URL: z.string().url().default("https://overpass-api.de/api/interpreter"),
   NOMINATIM_URL: z.string().url().default("https://nominatim.openstreetmap.org"),
+  /** fontes de busca habilitadas, separadas por vírgula (padrão: só o Google Maps) */
+  SEARCH_SOURCES: z.string().default("GOOGLE_MAPS_SCRAPER"),
   /** geocodificador reserva (Photon/komoot, dados do OpenStreetMap) */
   PHOTON_URL: z.string().url().default("https://photon.komoot.io"),
   HTTP_USER_AGENT: z.string().default("ProspectaBot/0.1 (+local)"),

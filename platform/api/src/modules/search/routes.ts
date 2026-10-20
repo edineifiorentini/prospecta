@@ -13,7 +13,7 @@ import { geocode, tryGeocode } from "../geo/geocode.ts";
 import { readOrgSettings } from "../orgs/settings.ts";
 import { searchFiltersSchema, searchParamsSchema } from "../sources/types.ts";
 import { detectMapping, mapCsvRow, mappingSchema, parseCsv } from "../imports/csv-import.ts";
-import { ADAPTERS } from "./registry.ts";
+import { ADAPTERS, DEFAULT_SOURCE } from "./registry.ts";
 import { csvRowsKey } from "./processor.ts";
 
 const ACTIVE = ["QUEUED", "SUBMITTED", "RUNNING", "DOWNLOADING", "IMPORTING"] as const;
@@ -23,6 +23,16 @@ async function loadJob(organizationId: string, id: string) {
   const job = await prisma.searchJob.findFirst({ where: { id, organizationId } });
   if (!job) throw notFound("Busca não encontrada.");
   return job;
+}
+
+/** Confere se a fonte está habilitada e, no Google Maps, os limites de uso da organização. */
+async function assertCanRun(organizationId: string, provider: string) {
+  if (!ADAPTERS[provider]) throw unprocessable("Esta fonte de busca está desativada. Use o Google Maps.");
+  if (provider !== "GOOGLE_MAPS_SCRAPER") return;
+  const settings = readOrgSettings((await prisma.organization.findUnique({ where: { id: organizationId } }))?.settings);
+  if (!settings.discovery.googleMapsEnabled) throw unprocessable("O adaptador do Google Maps está desativado nas configurações.");
+  const running = await prisma.searchJob.count({ where: { organizationId, provider: "GOOGLE_MAPS_SCRAPER", status: { in: [...ACTIVE] } } });
+  if (running >= 2) throw conflict("Já existem buscas do Google Maps em andamento. Por segurança contra bloqueios, aguarde terminarem.");
 }
 
 export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
@@ -53,12 +63,7 @@ export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
     async (req, reply) => {
       const organizationId = orgId(req);
       const params = req.body;
-      if (params.provider === "GOOGLE_MAPS_SCRAPER") {
-        const settings = readOrgSettings((await prisma.organization.findUnique({ where: { id: organizationId } }))?.settings);
-        if (!settings.discovery.googleMapsEnabled) throw unprocessable("O adaptador do Google Maps está desativado nas configurações.");
-        const running = await prisma.searchJob.count({ where: { organizationId, provider: "GOOGLE_MAPS_SCRAPER", status: { in: [...ACTIVE] } } });
-        if (running >= 2) throw conflict("Já existem buscas do Google Maps em andamento. Por segurança contra bloqueios, aguarde terminarem.");
-      }
+      await assertCanRun(organizationId, params.provider);
       const where = [params.neighborhood, params.city, params.state].filter(Boolean).join(", ");
       const job = await prisma.searchJob.create({
         data: {
@@ -106,8 +111,12 @@ export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
     const job = await loadJob(orgId(req), req.params.id);
     if (job.provider === "CSV_IMPORT") throw badRequest("Para importar novamente, envie o arquivo outra vez.");
     if (!["FAILED", "CANCELLED"].includes(job.status)) throw badRequest("Só é possível repetir buscas que falharam ou foram canceladas.");
+    // buscas de uma fonte desativada (ex.: OpenStreetMap) são repetidas pela fonte habilitada
+    const provider = ADAPTERS[job.provider] ? job.provider : DEFAULT_SOURCE;
+    await assertCanRun(job.organizationId, provider);
+    const params = { ...(job.params as Record<string, unknown>), provider };
     const copy = await prisma.searchJob.create({
-      data: { organizationId: job.organizationId, createdById: req.auth!.userId, provider: job.provider, name: job.name, params: job.params as Prisma.InputJsonValue, progress: { phase: "queued", message: "Na fila de processamento." } },
+      data: { organizationId: job.organizationId, createdById: req.auth!.userId, provider: provider as typeof job.provider, name: job.name, params: params as Prisma.InputJsonValue, progress: { phase: "queued", message: "Na fila de processamento." } },
     });
     await enqueueSearch({ searchJobId: copy.id });
     return reply.code(201).send({ id: copy.id });

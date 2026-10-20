@@ -50,18 +50,48 @@ async function getJson<T>(url: URL): Promise<T> {
   }
 }
 
-type NominatimHit = { lat: string; lon: string; display_name: string; boundingbox?: string[]; address?: Record<string, string> };
+type NominatimHit = {
+  lat: string;
+  lon: string;
+  display_name: string;
+  name?: string;
+  osm_type?: string;
+  type?: string;
+  addresstype?: string;
+  boundingbox?: string[];
+  address?: Record<string, string>;
+};
+
+const SETTLEMENT = new Set(["city", "town", "village", "hamlet"]);
+const LOCALITY = new Set(["suburb", "neighbourhood", "quarter", "city_district", "borough"]);
+
+/**
+ * Escolhe o ponto da cidade (ou do bairro) em vez do contorno do município: o centro geométrico de um
+ * município grande pode ficar a quilômetros da área urbana (ex.: Tapejara-PR, ~10 km).
+ */
+export function pickPlace<T>(hits: T[], input: LocationInput, describe: (h: T) => { name?: string; isPoint: boolean; kinds: string[] }): T | undefined {
+  const local = !!input.neighborhood?.trim();
+  const target = fold((local ? input.neighborhood : input.city) ?? "");
+  const wanted = local ? LOCALITY : SETTLEMENT;
+  const score = (h: T) => {
+    const d = describe(h);
+    return (d.isPoint ? 2 : 0) + (d.kinds.some((k) => wanted.has(k)) ? 3 : 0) + (target && d.name && fold(d.name) === target ? 2 : 0);
+  };
+  let best: T | undefined;
+  for (const h of hits) if (best === undefined || score(h) > score(best)) best = h;
+  return best;
+}
 
 async function nominatim(text: string, input: LocationInput): Promise<GeoPlace | null> {
   await waitSlot("nominatim");
   const url = new URL("/search", env.NOMINATIM_URL);
   url.searchParams.set("format", "jsonv2");
-  url.searchParams.set("limit", "1");
+  url.searchParams.set("limit", "5");
   url.searchParams.set("addressdetails", "1");
   url.searchParams.set("accept-language", "pt-BR");
   url.searchParams.set("q", text);
   if (isBrazil(input.country)) url.searchParams.set("countrycodes", "br");
-  const hit = (await getJson<NominatimHit[]>(url))[0];
+  const hit = pickPlace(await getJson<NominatimHit[]>(url), input, (h) => ({ name: h.name, isPoint: h.osm_type === "node", kinds: [h.type ?? "", h.addresstype ?? ""] }));
   if (!hit) return null;
   const a = hit.address ?? {};
   const label =
@@ -72,7 +102,19 @@ async function nominatim(text: string, input: LocationInput): Promise<GeoPlace |
 
 export type PhotonFeature = {
   geometry: { coordinates: [number, number] };
-  properties: { name?: string; city?: string; district?: string; locality?: string; state?: string; country?: string; countrycode?: string; type?: string; extent?: [number, number, number, number] };
+  properties: {
+    name?: string;
+    city?: string;
+    district?: string;
+    locality?: string;
+    state?: string;
+    country?: string;
+    countrycode?: string;
+    type?: string;
+    osm_type?: string;
+    osm_value?: string;
+    extent?: [number, number, number, number];
+  };
 };
 
 /** Converte um resultado do Photon (GeoJSON; extent = [oeste, norte, leste, sul]). */
@@ -93,7 +135,8 @@ async function photon(text: string, input: LocationInput): Promise<GeoPlace | nu
   if (isBrazil(input.country)) url.searchParams.set("bbox", "-74.1,-33.9,-28.8,5.4");
   const json = await getJson<{ features?: PhotonFeature[] }>(url);
   const features = (json.features ?? []).filter((f) => !isBrazil(input.country) || f.properties.countrycode?.toUpperCase() === "BR");
-  return features[0] ? photonToPlace(features[0]) : null;
+  const best = pickPlace(features, input, (f) => ({ name: f.properties.name, isPoint: f.properties.osm_type === "N", kinds: [f.properties.osm_value ?? "", f.properties.type ?? ""] }));
+  return best ? photonToPlace(best) : null;
 }
 
 const PROVIDERS: [string, (text: string, input: LocationInput) => Promise<GeoPlace | null>][] = [
