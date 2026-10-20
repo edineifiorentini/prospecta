@@ -1,5 +1,9 @@
 # Google Maps Scraper Kit
 
+> **Este fork inclui a plataforma Prospecta** (prospecção B2B + CRM local, em português), em [`platform/`](platform/README.md).
+> Primeira execução: `node platform/scripts/init-env.mjs` → `docker compose up -d --build` → http://localhost:3000.
+> A interface original do kit (porta 8080) passou a ser opcional: `docker compose --profile kit-ui up -d`.
+
 <p align="center">
   <img src="assets/banner.svg" alt="Google Maps Scraper Kit — run a free Google Maps scraper locally, let Claude drive it on autopilot" width="100%">
 </p>
