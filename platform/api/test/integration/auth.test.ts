@@ -119,3 +119,22 @@ describe("senha temporária", () => {
     expect((await call(after, "GET", "/api/auth/session")).json().mustChangePassword).toBe(false);
   });
 });
+
+describe("convite de usuário", () => {
+  it("devolve a quem convidou o link de uso único para definir a senha", async () => {
+    const r = await call(admin, "POST", "/api/users", { name: "Convidado", email: "convidado@test.local", role: "SALES" });
+    expect(r.statusCode).toBe(201);
+    const link = new URL(r.json().inviteLink);
+    expect(link.pathname).toBe("/redefinir-senha");
+    const token = link.searchParams.get("token")!;
+
+    const app = await getApp();
+    expect((await app.inject({ method: "POST", url: "/api/auth/reset", payload: { token, password: "senha-do-convidado-42" } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: "/api/auth/reset", payload: { token, password: "outra-senha-qualquer-42" } })).statusCode).toBe(400);
+
+    // o convidado entra com a senha que definiu, mas não pode convidar ninguém (nem obter links)
+    const guest = await agentFromLogin("convidado@test.local", "senha-do-convidado-42");
+    expect((await call(guest, "GET", "/api/companies")).statusCode).toBe(200);
+    expect((await call(guest, "POST", "/api/users", { name: "Outro", email: "outro@test.local" })).statusCode).toBe(403);
+  });
+});

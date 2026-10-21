@@ -79,7 +79,8 @@ export const orgRoutes: FastifyPluginAsyncZod = async (app) => {
       const link = `${env.APP_BASE_URL}/redefinir-senha?token=${encodeURIComponent(token)}`;
       const sent = await sendMail(user.email, `Convite para ${org.name} — Prospecta`, `Olá, ${user.name}.\n\n${req.auth!.name} convidou você para a organização ${org.name} na Prospecta.\nDefina sua senha pelo link abaixo (válido por 72 horas):\n\n${link}\n`);
       await writeAudit(req, { action: "user.invited", entityType: "user", entityId: user.id, metadata: { role: req.body.role, emailSent: sent } });
-      return reply.code(201).send({ id: user.id, emailSent: sent });
+      // o link volta só para quem convidou (users:manage), para enviar por outro canal quando o e-mail não chega
+      return reply.code(201).send({ id: user.id, emailSent: sent, inviteLink: link });
     },
   );
 

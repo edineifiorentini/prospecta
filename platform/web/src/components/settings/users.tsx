@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, UserPlus } from "lucide-react";
+import { Check, Copy, Loader2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,6 +17,7 @@ import { ROLE_LABEL } from "@/lib/labels";
 import { useSession } from "@/lib/session";
 
 type Member = { id: string; name: string; email: string; isActive: boolean; lastLoginAt: string | null; role: string };
+type Invited = { name: string; email: string; emailSent: boolean; inviteLink: string };
 
 const ROLE_HELP: Record<string, string> = {
   OWNER: "Acesso total, inclusive outros proprietários.",
@@ -31,17 +32,36 @@ export function UsersSettings() {
   const { session, can } = useSession();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", role: "SALES" });
+  // convite recém-criado: a janela continua aberta mostrando o link para copiar
+  const [invited, setInvited] = useState<Invited | null>(null);
+  const [copied, setCopied] = useState(false);
   const users = useQuery({ queryKey: ["users"], queryFn: () => api<Member[]>("/users") });
   const invite = useMutation({
-    mutationFn: () => api<{ emailSent: boolean }>("/users", { method: "POST", body: form }),
+    mutationFn: () => api<{ emailSent: boolean; inviteLink: string }>("/users", { method: "POST", body: form }),
     onSuccess: (r) => {
-      toast.success("Convite criado", { description: r.emailSent ? "O link para definir a senha foi enviado por e-mail." : "Não foi possível enviar o e-mail; verifique o SMTP." });
-      setOpen(false);
-      setForm({ name: "", email: "", role: "SALES" });
+      setInvited({ name: form.name, email: form.email, ...r });
+      setCopied(false);
       qc.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
+  const toggleDialog = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setInvited(null);
+      setForm({ name: "", email: "", role: "SALES" });
+    }
+  };
+  const copyLink = async () => {
+    if (!invited) return;
+    try {
+      await navigator.clipboard.writeText(invited.inviteLink);
+      setCopied(true);
+      toast.success("Link copiado");
+    } catch {
+      toast.error("Não foi possível copiar automaticamente. Selecione o link e copie manualmente.");
+    }
+  };
   const update = useMutation({
     mutationFn: ({ id, ...body }: { id: string; role?: string; isActive?: boolean }) => api(`/users/${id}`, { method: "PATCH", body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
@@ -56,44 +76,69 @@ export function UsersSettings() {
       bodyClassName="p-0"
       actions={
         manage && (
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog open={open} onOpenChange={toggleDialog}>
             <DialogTrigger asChild>
               <Button size="sm">
                 <UserPlus /> Convidar
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Convidar usuário</DialogTitle>
-                <DialogDescription>A pessoa recebe um link de uso único (72 h) para definir a própria senha.</DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-3">
-                <Field id="iu-name" label="Nome">
-                  <Input id="iu-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-                </Field>
-                <Field id="iu-email" label="E-mail">
-                  <Input id="iu-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-                </Field>
-                <Field id="iu-role" label="Papel" hint={ROLE_HELP[form.role]}>
-                  <Select value={form.role} onValueChange={(role) => setForm({ ...form, role })}>
-                    <SelectTrigger id="iu-role" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.keys(ROLE_HELP).map((r) => (
-                        <SelectItem key={r} value={r}>
-                          {ROLE_LABEL[r]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </div>
-              <DialogFooter>
-                <Button onClick={() => invite.mutate()} disabled={invite.isPending || form.name.length < 2 || !form.email.includes("@")}>
-                  {invite.isPending && <Loader2 className="animate-spin" />} Enviar convite
-                </Button>
-              </DialogFooter>
+              {invited ? (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Convite criado</DialogTitle>
+                    <DialogDescription>
+                      {invited.emailSent ? `O link também foi enviado para ${invited.email}.` : `Não foi possível enviar o e-mail para ${invited.email}.`} Se o e-mail não chegar, copie o link e envie para {invited.name}, pelo WhatsApp, por exemplo.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-2">
+                    <div className="flex gap-2">
+                      <Input readOnly value={invited.inviteLink} aria-label="Link do convite" className="font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+                      <Button type="button" variant="outline" onClick={copyLink}>
+                        {copied ? <Check /> : <Copy />} {copied ? "Copiado" : "Copiar"}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Uso único, válido por 72 horas. Envie só para a pessoa convidada: quem abrir o link primeiro define a senha da conta.</p>
+                  </div>
+                  <DialogFooter>
+                    <Button onClick={() => toggleDialog(false)}>Concluir</Button>
+                  </DialogFooter>
+                </>
+              ) : (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Convidar usuário</DialogTitle>
+                    <DialogDescription>A pessoa recebe um link de uso único (72 h) para definir a própria senha.</DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-3">
+                    <Field id="iu-name" label="Nome">
+                      <Input id="iu-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                    </Field>
+                    <Field id="iu-email" label="E-mail">
+                      <Input id="iu-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                    </Field>
+                    <Field id="iu-role" label="Papel" hint={ROLE_HELP[form.role]}>
+                      <Select value={form.role} onValueChange={(role) => setForm({ ...form, role })}>
+                        <SelectTrigger id="iu-role" className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.keys(ROLE_HELP).map((r) => (
+                            <SelectItem key={r} value={r}>
+                              {ROLE_LABEL[r]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+                  <DialogFooter>
+                    <Button onClick={() => invite.mutate()} disabled={invite.isPending || form.name.length < 2 || !form.email.includes("@")}>
+                      {invite.isPending && <Loader2 className="animate-spin" />} Enviar convite
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
             </DialogContent>
           </Dialog>
         )
