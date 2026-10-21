@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Check, Copy, Loader2, UserPlus } from "lucide-react";
@@ -35,6 +35,7 @@ export function UsersSettings() {
   // convite recém-criado: a janela continua aberta mostrando o link para copiar
   const [invited, setInvited] = useState<Invited | null>(null);
   const [copied, setCopied] = useState(false);
+  const linkRef = useRef<HTMLInputElement>(null);
   const users = useQuery({ queryKey: ["users"], queryFn: () => api<Member[]>("/users") });
   const invite = useMutation({
     mutationFn: () => api<{ emailSent: boolean; inviteLink: string }>("/users", { method: "POST", body: form }),
@@ -54,13 +55,19 @@ export function UsersSettings() {
   };
   const copyLink = async () => {
     if (!invited) return;
+    let ok = false;
     try {
       await navigator.clipboard.writeText(invited.inviteLink);
+      ok = true;
+    } catch {
+      // navegadores que bloqueiam a área de transferência: copia o texto selecionado do campo
+      linkRef.current?.select();
+      ok = document.execCommand("copy");
+    }
+    if (ok) {
       setCopied(true);
       toast.success("Link copiado");
-    } catch {
-      toast.error("Não foi possível copiar automaticamente. Selecione o link e copie manualmente.");
-    }
+    } else toast.error("Não foi possível copiar automaticamente. Selecione o link e copie manualmente.");
   };
   const update = useMutation({
     mutationFn: ({ id, ...body }: { id: string; role?: string; isActive?: boolean }) => api(`/users/${id}`, { method: "PATCH", body }),
@@ -93,7 +100,7 @@ export function UsersSettings() {
                   </DialogHeader>
                   <div className="grid gap-2">
                     <div className="flex gap-2">
-                      <Input readOnly value={invited.inviteLink} aria-label="Link do convite" className="font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+                      <Input ref={linkRef} readOnly value={invited.inviteLink} aria-label="Link do convite" className="font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
                       <Button type="button" variant="outline" onClick={copyLink}>
                         {copied ? <Check /> : <Copy />} {copied ? "Copiado" : "Copiar"}
                       </Button>
