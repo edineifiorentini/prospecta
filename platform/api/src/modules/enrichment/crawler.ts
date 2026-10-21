@@ -1,5 +1,7 @@
 import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { BasicCrawler, Configuration, log as crawleeLog, LogLevel } from "@crawlee/cheerio";
 import { env } from "../../config/env.ts";
 import { logger } from "../../lib/logger.ts";
@@ -8,6 +10,12 @@ import { hostOf } from "../../lib/normalize.ts";
 import { extractPage, looksJsRendered, pickPriorityLinks, type PageExtraction } from "./extract.ts";
 
 crawleeLog.setLevel(LogLevel.WARNING);
+// o Crawlee salva estado periodicamente em ./storage; no container /app não é gravável e a falha deixava a coleta parada
+process.env.CRAWLEE_STORAGE_DIR ??= join(tmpdir(), "prospecta-crawlee");
+process.env.CRAWLEE_PERSIST_STORAGE ??= "false";
+
+/** Tempo máximo da fila de páginas secundárias; ao estourar, segue com as páginas já lidas. */
+const CRAWL_RUN_TIMEOUT_MS = 120_000;
 
 // robots-parser é CommonJS (module.exports = função)
 type Robot = { isAllowed(url: string, ua?: string): boolean | undefined; getSitemaps(): string[] };
@@ -216,7 +224,13 @@ export async function crawlWebsite(startUrl: string, opts: { maxPages?: number; 
       },
       config,
     );
-    await crawler.run(targets.map((url) => ({ url, uniqueKey: url })));
+    let timer: NodeJS.Timeout | undefined;
+    const timedOut = new Promise<"timeout">((resolve) => (timer = setTimeout(() => resolve("timeout"), CRAWL_RUN_TIMEOUT_MS)));
+    const outcome = await Promise.race([crawler.run(targets.map((url) => ({ url, uniqueKey: url }))), timedOut]).finally(() => clearTimeout(timer));
+    if (outcome === "timeout") {
+      result.errors.push({ url: home.finalUrl, message: `Páginas secundárias interrompidas após ${CRAWL_RUN_TIMEOUT_MS / 1000}s.` });
+      await crawler.teardown().catch(() => undefined);
+    }
   }
 
   // 3) fallback com navegador para sites que dependem de JavaScript

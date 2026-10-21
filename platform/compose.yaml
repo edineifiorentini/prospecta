@@ -114,6 +114,8 @@ services:
     image: prospecta/api:local
     container_name: prospecta-api
     restart: unless-stopped
+    # processo init recolhe os Chrome encerrados (Lighthouse/renderização) que viravam zumbis
+    init: true
     environment:
       <<: *api-env
       ROLE: api
@@ -133,6 +135,7 @@ services:
     image: prospecta/api:local
     container_name: prospecta-worker
     restart: unless-stopped
+    init: true
     command: ["node", "dist/worker.js"]
     environment:
       <<: *api-env
