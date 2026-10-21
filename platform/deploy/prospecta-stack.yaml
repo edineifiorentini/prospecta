@@ -39,6 +39,10 @@ x-api-env: &api-env
 x-restart: &restart
   restart_policy: { condition: any, delay: 5s }
 
+# o Traefik em modo Swarm publica por padrão todo serviço que não disser o contrário
+x-no-traefik: &no-traefik
+  traefik.enable: "false"
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -61,6 +65,7 @@ services:
     deploy:
       <<: *restart
       resources: { limits: { memory: 512M } }
+      labels: *no-traefik
 
   valkey:
     image: valkey/valkey:8-alpine
@@ -78,6 +83,7 @@ services:
     deploy:
       <<: *restart
       resources: { limits: { memory: 256M } }
+      labels: *no-traefik
 
   # caixa de e-mails interna (sem porta). Com um SMTP real em SMTP_URL, deixa de receber mensagens.
   mailpit:
@@ -90,6 +96,7 @@ services:
     deploy:
       <<: *restart
       resources: { limits: { memory: 128M } }
+      labels: *no-traefik
 
   wuzapi:
     image: asternic/wuzapi:1.0.9
@@ -114,6 +121,7 @@ services:
     deploy:
       <<: *restart
       resources: { limits: { memory: 256M } }
+      labels: *no-traefik
 
   # motor gosom/google-maps-scraper (MIT). A API dele não tem autenticação: fica só na rede interna.
   google-maps-scraper:
@@ -129,6 +137,7 @@ services:
     deploy:
       <<: *restart
       resources: { limits: { memory: 1536M } }
+      labels: *no-traefik
 
   platform-api:
     image: prospecta/api:local
@@ -147,6 +156,7 @@ services:
     deploy:
       <<: *restart
       resources: { limits: { memory: 512M } }
+      labels: *no-traefik
 
   platform-worker:
     image: prospecta/api:local
@@ -169,6 +179,7 @@ services:
     deploy:
       <<: *restart
       resources: { limits: { memory: 2048M } }
+      labels: *no-traefik
 
   platform-web:
     image: prospecta/web:local
@@ -186,6 +197,7 @@ services:
     deploy:
       <<: *restart
       resources: { limits: { memory: 384M } }
+      labels: *no-traefik
 
   # único ponto de entrada: o Traefik existente entrega o domínio a este gateway pela rede dele
   platform-gateway:
