@@ -1,0 +1,15 @@
+# Proxy de produção (compose.prod.yaml): certificado HTTPS automático para o domínio em DOMAIN.
+# O HTTP (porta 80) é redirecionado para HTTPS pelo próprio Caddy.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+	# o Caddy envia o IP do visitante em X-Forwarded-For; o gateway confia nele (realip.conf)
+	reverse_proxy platform-gateway:80
+}

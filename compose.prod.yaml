@@ -1,0 +1,42 @@
+# Produção em VPS: HTTPS automático (Let's Encrypt) com o Caddy na frente do gateway.
+# No servidor, ative este arquivo em todos os comandos "docker compose" colocando no .env:
+#   COMPOSE_FILE=docker-compose.yml:compose.prod.yaml
+# Passo a passo completo: platform/docs/DEPLOY-VPS.md
+#
+# O que muda em relação ao uso local:
+#   - só o Caddy publica portas (80 e 443); gateway e Mailpit deixam de abrir porta no servidor
+#   - o gateway passa a registrar o IP real do visitante (limite de tentativas de login por IP)
+
+services:
+  caddy:
+    image: caddy:2.11.7-alpine
+    container_name: prospecta-caddy
+    restart: unless-stopped
+    environment:
+      DOMAIN: "${DOMAIN:?defina DOMAIN no .env, por exemplo prospecta.seudominio.com.br}"
+      ACME_EMAIL: "${ACME_EMAIL:?defina ACME_EMAIL no .env para receber os avisos do Let's Encrypt}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./platform/deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    networks: [edge]
+    depends_on:
+      platform-gateway: { condition: service_healthy }
+
+  platform-gateway:
+    # sem porta no servidor: só o Caddy chega ao gateway, pela rede interna
+    ports: !reset []
+    volumes:
+      - ./platform/deploy/realip.conf:/etc/nginx/prospecta.d/realip.conf:ro
+
+  mailpit:
+    # a caixa de e-mails de teste fica só na rede interna; em produção use um SMTP real (SMTP_URL)
+    ports: !reset []
+
+volumes:
+  caddydata:
+  caddyconfig:
