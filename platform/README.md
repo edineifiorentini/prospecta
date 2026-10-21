@@ -67,6 +67,8 @@ Os dados ficam nos volumes `prospecta_pgdata` (banco), `prospecta_wuzapidata` (s
 
 ## Uso
 
+**Contas de clientes.** Cada cliente tem uma conta separada (organização própria): buscas, empresas, CRM e WhatsApp de uma conta nunca aparecem em outra. Só o administrador da plataforma (quem instalou o sistema) cria contas, em *Configurações → Contas*, e lá vê apenas nome, responsável e totais de cada uma. Já *Configurações → Usuários → Convidar* adiciona pessoas à **própria** empresa, com acesso aos mesmos dados. Sem SMTP configurado, as duas telas mostram o link de acesso para copiar e enviar, por exemplo, pelo WhatsApp.
+
 No primeiro acesso, um **tour guiado** apresenta as telas principais. O roteiro **Primeiros passos**, no menu lateral, marca sozinho o que já foi feito a partir dos registros reais e mostra o próximo passo. O tour pode ser retomado ou revisto a qualquer momento pelo menu do usuário (Tour guiado).
 
 1. **Encontrar empresas** (*Encontrar Empresas*)
