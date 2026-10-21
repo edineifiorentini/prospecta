@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/page";
 import { AccountSettings } from "@/components/settings/account";
 import { UsersSettings } from "@/components/settings/users";
+import { AccountsSettings } from "@/components/settings/accounts";
 import { OrganizationSettings } from "@/components/settings/organization";
 import { AuditLogSettings, SystemSettings } from "@/components/settings/system";
 import { ScoringSettings } from "@/components/settings/scoring";
@@ -15,7 +16,8 @@ import { PrivacySettings } from "@/components/settings/privacy";
 import { useSession } from "@/lib/session";
 
 function SettingsTabs() {
-  const { can } = useSession();
+  const { can, session } = useSession();
+  const platformAdmin = !!session?.user.isPlatformAdmin;
   const params = useSearchParams();
   const [tab, setTab] = useState(params.get("tab") ?? "conta");
   return (
@@ -24,6 +26,7 @@ function SettingsTabs() {
         <TabsList className="w-max">
           <TabsTrigger value="conta">Conta e segurança</TabsTrigger>
           <TabsTrigger value="usuarios">Usuários</TabsTrigger>
+          {platformAdmin && <TabsTrigger value="contas">Contas</TabsTrigger>}
           <TabsTrigger value="organizacao">Organização</TabsTrigger>
           <TabsTrigger value="pontuacao">Pontuação</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
@@ -38,6 +41,11 @@ function SettingsTabs() {
       <TabsContent value="usuarios">
         <UsersSettings />
       </TabsContent>
+      {platformAdmin && (
+        <TabsContent value="contas">
+          <AccountsSettings />
+        </TabsContent>
+      )}
       <TabsContent value="organizacao">
         <OrganizationSettings />
       </TabsContent>

@@ -146,6 +146,7 @@ export const crmRoutes: FastifyPluginAsyncZod = async (app) => {
     const pipeline = await defaultPipeline(organizationId);
     const stage = req.body.stageId ? pipeline.stages.find((s) => s.id === req.body.stageId) : pipeline.stages[0];
     if (!stage) throw badRequest("Etapa inválida.");
+    if (req.body.ownerId && !(await prisma.membership.findFirst({ where: { organizationId, userId: req.body.ownerId } }))) throw badRequest("Responsável não pertence à organização.");
     const deal = await prisma.deal.create({
       data: {
         organizationId, companyId: company.id, pipelineId: pipeline.id, stageId: stage.id, title: req.body.title || company.name, valueCents: req.body.valueCents,

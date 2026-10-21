@@ -223,6 +223,7 @@ export const companyRoutes: FastifyPluginAsyncZod = async (app) => {
       const b = req.body;
       const website = b.website ? safeHttpUrl(b.website) : null;
       if (b.website && !website) throw badRequest("Site inválido. Use um endereço http(s).");
+      if (b.ownerId && !(await prisma.membership.findFirst({ where: { organizationId: orgId(req), userId: b.ownerId } }))) throw badRequest("Responsável não pertence à organização.");
       const r = await upsertDiscovered(
         { organizationId: orgId(req), source: "MANUAL", sourceRef: `usuário ${req.auth!.name}`, userId: req.auth!.userId },
         {

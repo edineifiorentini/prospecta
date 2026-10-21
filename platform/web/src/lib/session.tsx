@@ -11,7 +11,8 @@ export type SessionData =
   | {
       authenticated: true;
       csrfToken: string;
-      user: { id: string; name: string; email: string };
+      /** isPlatformAdmin: cria contas (empresas separadas) para clientes */
+      user: { id: string; name: string; email: string; isPlatformAdmin?: boolean };
       mustChangePassword: boolean;
       organization: { id: string; name: string; slug: string } | null;
       role: Role;

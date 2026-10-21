@@ -71,6 +71,8 @@ model User {
   passwordChangedAt DateTime @default(now()) @map("password_changed_at")
   /// Senha temporária: o usuário precisa trocá-la antes de usar o sistema
   mustChangePassword Boolean @default(false) @map("must_change_password")
+  /// Administrador da plataforma: cria contas (empresas separadas) para clientes. Não enxerga os dados delas.
+  isPlatformAdmin  Boolean   @default(false) @map("is_platform_admin")
   /// preferências do usuário (ex.: andamento do guia de primeiros passos)
   preferences      Json      @default("{}")
   createdAt        DateTime  @default(now()) @map("created_at")

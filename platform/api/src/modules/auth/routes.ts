@@ -51,7 +51,8 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
 
       const passwordHash = await hashPassword(b.password);
       const { user, organization } = await prisma.$transaction(async (tx) => {
-        const user = await tx.user.create({ data: { email: b.email, name: b.name, passwordHash } });
+        // quem instala o sistema administra a plataforma (cria as contas dos clientes)
+        const user = await tx.user.create({ data: { email: b.email, name: b.name, passwordHash, isPlatformAdmin: true } });
         const organization = await bootstrapOrganization(tx, b.organizationName);
         await tx.membership.create({ data: { userId: user.id, organizationId: organization.id, role: "OWNER" } });
         return { user, organization };
@@ -120,7 +121,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
     return {
       authenticated: true as const,
       csrfToken: req.auth.csrfToken,
-      user: { id: req.auth.userId, name: req.auth.name, email: req.auth.email },
+      user: { id: req.auth.userId, name: req.auth.name, email: req.auth.email, isPlatformAdmin: req.auth.isPlatformAdmin },
       mustChangePassword: req.auth.mustChangePassword,
       organization: org,
       role: req.auth.role,

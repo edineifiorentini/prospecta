@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, Copy, Loader2, UserPlus } from "lucide-react";
+import { Loader2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,6 +15,7 @@ import { api, errorMessage } from "@/lib/api";
 import { fmtRelative } from "@/lib/format";
 import { ROLE_LABEL } from "@/lib/labels";
 import { useSession } from "@/lib/session";
+import { InviteLink } from "./invite-link";
 
 type Member = { id: string; name: string; email: string; isActive: boolean; lastLoginAt: string | null; role: string };
 type Invited = { name: string; email: string; emailSent: boolean; inviteLink: string };
@@ -34,14 +35,11 @@ export function UsersSettings() {
   const [form, setForm] = useState({ name: "", email: "", role: "SALES" });
   // convite recém-criado: a janela continua aberta mostrando o link para copiar
   const [invited, setInvited] = useState<Invited | null>(null);
-  const [copied, setCopied] = useState(false);
-  const linkRef = useRef<HTMLInputElement>(null);
   const users = useQuery({ queryKey: ["users"], queryFn: () => api<Member[]>("/users") });
   const invite = useMutation({
     mutationFn: () => api<{ emailSent: boolean; inviteLink: string }>("/users", { method: "POST", body: form }),
     onSuccess: (r) => {
       setInvited({ name: form.name, email: form.email, ...r });
-      setCopied(false);
       qc.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (e) => toast.error(errorMessage(e)),
@@ -52,22 +50,6 @@ export function UsersSettings() {
       setInvited(null);
       setForm({ name: "", email: "", role: "SALES" });
     }
-  };
-  const copyLink = async () => {
-    if (!invited) return;
-    let ok = false;
-    try {
-      await navigator.clipboard.writeText(invited.inviteLink);
-      ok = true;
-    } catch {
-      // navegadores que bloqueiam a área de transferência: copia o texto selecionado do campo
-      linkRef.current?.select();
-      ok = document.execCommand("copy");
-    }
-    if (ok) {
-      setCopied(true);
-      toast.success("Link copiado");
-    } else toast.error("Não foi possível copiar automaticamente. Selecione o link e copie manualmente.");
   };
   const update = useMutation({
     mutationFn: ({ id, ...body }: { id: string; role?: string; isActive?: boolean }) => api(`/users/${id}`, { method: "PATCH", body }),
@@ -98,15 +80,7 @@ export function UsersSettings() {
                       {invited.emailSent ? `O link também foi enviado para ${invited.email}.` : `Não foi possível enviar o e-mail para ${invited.email}.`} Se o e-mail não chegar, copie o link e envie para {invited.name}, pelo WhatsApp, por exemplo.
                     </DialogDescription>
                   </DialogHeader>
-                  <div className="grid gap-2">
-                    <div className="flex gap-2">
-                      <Input ref={linkRef} readOnly value={invited.inviteLink} aria-label="Link do convite" className="font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
-                      <Button type="button" variant="outline" onClick={copyLink}>
-                        {copied ? <Check /> : <Copy />} {copied ? "Copiado" : "Copiar"}
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">Uso único, válido por 72 horas. Envie só para a pessoa convidada: quem abrir o link primeiro define a senha da conta.</p>
-                  </div>
+                  <InviteLink key={invited.inviteLink} link={invited.inviteLink} />
                   <DialogFooter>
                     <Button onClick={() => toggleDialog(false)}>Concluir</Button>
                   </DialogFooter>
@@ -115,7 +89,10 @@ export function UsersSettings() {
                 <>
                   <DialogHeader>
                     <DialogTitle>Convidar usuário</DialogTitle>
-                    <DialogDescription>A pessoa recebe um link de uso único (72 h) para definir a própria senha.</DialogDescription>
+                    <DialogDescription>
+                      A pessoa entra na sua empresa e vê os mesmos dados que você. Ela recebe um link de uso único (72 h) para definir a própria senha.
+                      {session?.user.isPlatformAdmin && " Para um cliente com dados separados, use a aba Contas."}
+                    </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-3">
                     <Field id="iu-name" label="Nome">

@@ -21,6 +21,8 @@ export type AuthContext = {
   name: string;
   /** senha temporária ainda não trocada: só as rotas de PASSWORD_CHANGE_ALLOWED respondem */
   mustChangePassword: boolean;
+  /** pode criar contas (empresas separadas) para clientes; não dá acesso aos dados delas */
+  isPlatformAdmin: boolean;
 };
 
 declare module "fastify" {
@@ -104,6 +106,7 @@ async function resolveSession(req: FastifyRequest): Promise<AuthContext | null> 
     email: session.user.email,
     name: session.user.name,
     mustChangePassword: session.user.mustChangePassword,
+    isPlatformAdmin: session.user.isPlatformAdmin,
   };
 }
 

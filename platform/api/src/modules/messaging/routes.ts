@@ -198,6 +198,7 @@ export const messagingRoutes: FastifyPluginAsyncZod = async (app) => {
         if (existing.conversationId !== conv.id) throw conflict("Chave de idempotência já usada em outra conversa.");
         return reply.code(200).send(existing);
       }
+      if (req.body.templateId && !(await prisma.messageTemplate.findFirst({ where: { id: req.body.templateId, organizationId } }))) throw notFound("Modelo de mensagem não encontrado.");
       if (conv.messagingAccount.status !== "CONNECTED") throw unavailable("O WhatsApp não está conectado. Conecte a conta em Configurações → WhatsApp.");
       const decision = await decideSend(organizationId, conv.contactPhone, { lastInboundAt: conv.lastInboundAt, accountId: conv.messagingAccountId });
       if (!decision.allowed) {
