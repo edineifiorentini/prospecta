@@ -8,6 +8,10 @@ A configuração de produção está em [`compose.prod.yaml`](../../compose.prod
 e [`platform/deploy/realip.conf`](../deploy/realip.conf). No seu computador nada muda: sem esses ajustes no `.env`, tudo continua em
 `http://localhost:3000`.
 
+> **O servidor já tem Traefik e Docker Swarm** (instalações com Portainer, Evolution API, n8n etc.)? As portas 80 e 443 já
+> são do Traefik: use a seção [Servidor que já usa Traefik e Docker Swarm](#servidor-que-já-usa-traefik-e-docker-swarm) no
+> fim deste guia, e não o Caddy.
+
 ## Antes de começar
 
 | Item | Recomendação | Por quê |
@@ -233,3 +237,84 @@ As migrações do banco são aplicadas sozinhas quando a API reinicia. Faça um 
 | Lentidão ou serviços reiniciando | memória: `free -h`. Com 4 GB, crie swap (passo 3) ou aumente o plano |
 | Buscas falhando com bloqueio | o Google limitou o IP da VPS: aguarde e faça buscas menores |
 | E-mails de recuperação de senha não chegam | sem `SMTP_URL` real, eles ficam presos no Mailpit interno (passo 5) |
+
+## Servidor que já usa Traefik e Docker Swarm
+
+Em servidores montados com Portainer + Traefik no Docker Swarm, o Prospecta entra como mais uma stack
+([`platform/deploy/prospecta-stack.yaml`](../deploy/prospecta-stack.yaml)):
+
+- não publica porta nenhuma: o Traefik existente recebe o domínio, emite o certificado e entrega ao gateway pela rede dele;
+- banco, filas, motor do Google Maps e WhatsApp ficam em redes próprias da stack, longe das outras aplicações;
+- cada serviço tem limite de memória (cerca de 5,6 GB no máximo somando todos; o uso normal fica em torno de 2,5 GB);
+- tem banco próprio (Postgres 17), separado de qualquer Supabase ou Postgres que já exista no servidor;
+- nenhuma outra stack, nem o Traefik, é alterada.
+
+**Antes:** descubra a rede e o certresolver do Traefik (como root):
+
+```bash
+docker service inspect traefik_traefik --format '{{range .Spec.TaskTemplate.ContainerSpec.Args}}{{println .}}{{end}}' | grep -E 'certificatesresolvers|network'
+```
+
+**Passo a passo** (como root):
+
+1. Swap de 4 GB, se o servidor não tiver (`swapon --show` vazio):
+
+   ```bash
+   fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+   echo '/swapfile none swap sw 0 0' >> /etc/fstab
+   echo 'vm.swappiness=10' > /etc/sysctl.d/90-prospecta-swap.conf && sysctl -p /etc/sysctl.d/90-prospecta-swap.conf
+   ```
+
+2. Código com chave de implantação (veja o passo 4 do guia), na pasta `/opt/prospecta`.
+
+3. `.env` sem precisar instalar o Node no servidor:
+
+   ```bash
+   cd /opt/prospecta
+   docker run --rm -v /opt/prospecta:/w -w /w node:24-alpine node platform/scripts/init-env.mjs
+   chmod 600 .env
+   ```
+
+   Ajuste no `.env`:
+
+   ```dotenv
+   APP_BASE_URL=https://prospecta.seudominio.com.br
+   COOKIE_SECURE=true
+   DOMAIN=prospecta.seudominio.com.br
+   PROSPECTA_DIR=/opt/prospecta
+   TRAEFIK_NETWORK=nome-da-rede-do-traefik
+   TRAEFIK_CERTRESOLVER=nome-do-certresolver
+   ```
+
+4. Compile as imagens e suba a stack:
+
+   ```bash
+   docker compose build platform-api platform-web
+   sh platform/deploy/swarm-deploy.sh
+   docker stack services prospecta
+   ```
+
+   A stack aparece também no Portainer, como as outras.
+
+5. Dados do computador: gere o backup no computador (`node platform/scripts/backup.mjs`), copie o `.dump` e o `.sha256`
+   para `/opt/prospecta/platform/backups/` e restaure:
+
+   ```bash
+   sh platform/deploy/swarm-restore.sh platform/backups/prospecta-AAAAMMDD-HHMMSS.dump --yes
+   ```
+
+   Para começar do zero, crie o administrador:
+   `docker exec -it $(docker ps -q -f name=prospecta_platform-api) node dist/cli/owner.js --email voce@exemplo.com --name "Seu Nome"`
+
+6. Backup diário às 3h, mantendo os 14 mais recentes (`crontab -e`):
+
+   ```cron
+   0 3 * * * sh /opt/prospecta/platform/deploy/swarm-backup.sh 14 >> /var/log/prospecta-backup.log 2>&1
+   ```
+
+**Atualizar:** `cd /opt/prospecta && git pull && docker compose build platform-api platform-web && sh platform/deploy/swarm-deploy.sh`.
+Como as imagens mantêm o mesmo nome, force a troca dos contêineres em seguida:
+`docker service update --force prospecta_platform-api && docker service update --force prospecta_platform-worker && docker service update --force prospecta_platform-web`.
+
+**Remover o Prospecta do servidor** (as outras stacks não são afetadas): `docker stack rm prospecta`. Os volumes com os dados
+(`prospecta_pgdata` e demais) continuam no disco até serem apagados manualmente.

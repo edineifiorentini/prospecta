@@ -1,0 +1,231 @@
+# Prospecta como stack do Docker Swarm, atrás de um Traefik que já atende o servidor
+# (instalações com Portainer + Traefik, como as do Evolution API e do n8n).
+#
+# Não publica nenhuma porta: o Traefik existente recebe o domínio, emite o certificado e entrega
+# ao gateway pela rede dele. Banco, filas, motor do Google Maps e WhatsApp ficam em redes próprias.
+# Cada serviço tem limite de memória para não disputar recursos com as outras stacks.
+#
+# Implantação: platform/deploy/swarm-deploy.sh (lê o .env da raiz). Passo a passo em
+# platform/docs/DEPLOY-VPS.md, seção "Servidor que já usa Traefik e Docker Swarm".
+
+x-api-env: &api-env
+  NODE_ENV: production
+  TZ: America/Sao_Paulo
+  DATABASE_URL: postgresql://${POSTGRES_USER:-prospecta}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@postgres:5432/${POSTGRES_DB:-prospecta}?schema=public
+  REDIS_URL: redis://:${VALKEY_PASSWORD:?defina VALKEY_PASSWORD no .env}@valkey:6379
+  APP_BASE_URL: ${APP_BASE_URL:?defina APP_BASE_URL no .env, por exemplo https://prospecta.seudominio.com.br}
+  APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?defina APP_ENCRYPTION_KEY no .env}
+  SESSION_SECRET: ${SESSION_SECRET:?defina SESSION_SECRET no .env}
+  ADMIN_BOOTSTRAP_TOKEN: ${ADMIN_BOOTSTRAP_TOKEN:-}
+  COOKIE_SECURE: "true"
+  SMTP_URL: ${SMTP_URL:-smtp://mailpit:1025}
+  MAIL_FROM: ${MAIL_FROM:-Prospecta <no-reply@prospecta.local>}
+  GMAPS_SCRAPER_URL: http://google-maps-scraper:8080
+  GMAPS_SCRAPER_ENABLED: ${GMAPS_SCRAPER_ENABLED:-true}
+  OVERPASS_URL: ${OVERPASS_URL:-https://overpass-api.de/api/interpreter}
+  NOMINATIM_URL: ${NOMINATIM_URL:-https://nominatim.openstreetmap.org}
+  PHOTON_URL: ${PHOTON_URL:-https://photon.komoot.io}
+  SEARCH_SOURCES: ${SEARCH_SOURCES:-GOOGLE_MAPS_SCRAPER}
+  GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+  GOOGLE_MAPS_MAP_ID: ${GOOGLE_MAPS_MAP_ID:-}
+  GOOGLE_GEOCODING_API_KEY: ${GOOGLE_GEOCODING_API_KEY:-}
+  HTTP_USER_AGENT: ${HTTP_USER_AGENT:-ProspectaBot/0.1 (+local; contato via administrador)}
+  WUZAPI_URL: http://wuzapi:8080
+  WUZAPI_ADMIN_TOKEN: ${WUZAPI_ADMIN_TOKEN:?defina WUZAPI_ADMIN_TOKEN no .env}
+  WUZAPI_WEBHOOK_URL: http://platform-api:4000/api/webhooks/wuzapi
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  CRAWLER_ALLOW_HOSTS: ""
+
+x-restart: &restart
+  restart_policy: { condition: any, delay: 5s }
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-prospecta}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:-prospecta}
+      TZ: America/Sao_Paulo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - type: tmpfs
+        target: /dev/shm
+        tmpfs: { size: 268435456 }
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    deploy:
+      <<: *restart
+      resources: { limits: { memory: 512M } }
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--appendonly", "yes", "--requirepass", "${VALKEY_PASSWORD:?defina VALKEY_PASSWORD no .env}", "--maxmemory-policy", "noeviction"]
+    environment:
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD}
+    volumes:
+      - valkeydata:/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -a \"$$VALKEY_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    deploy:
+      <<: *restart
+      resources: { limits: { memory: 256M } }
+
+  # caixa de e-mails interna (sem porta). Com um SMTP real em SMTP_URL, deixa de receber mensagens.
+  mailpit:
+    image: axllent/mailpit:v1.31.4
+    environment:
+      MP_UI_AUTH: ${MAILPIT_UI_AUTH:?defina MAILPIT_UI_AUTH no .env}
+      MP_MAX_MESSAGES: 500
+      TZ: America/Sao_Paulo
+    networks: [backend]
+    deploy:
+      <<: *restart
+      resources: { limits: { memory: 128M } }
+
+  wuzapi:
+    image: asternic/wuzapi:1.0.9
+    environment:
+      WUZAPI_ADMIN_TOKEN: ${WUZAPI_ADMIN_TOKEN:?defina WUZAPI_ADMIN_TOKEN no .env}
+      WUZAPI_GLOBAL_ENCRYPTION_KEY: ${WUZAPI_GLOBAL_ENCRYPTION_KEY:?defina WUZAPI_GLOBAL_ENCRYPTION_KEY no .env}
+      WUZAPI_GLOBAL_HMAC_KEY: ${WUZAPI_GLOBAL_HMAC_KEY:?defina WUZAPI_GLOBAL_HMAC_KEY no .env}
+      WEBHOOK_FORMAT: json
+      TZ: America/Sao_Paulo
+      SESSION_DEVICE_NAME: Prospecta
+      WUZAPI_AUTO_PRESENCE: unavailable
+      LOG_LEVEL: info
+    command: ["-datadir", "/data"]
+    volumes:
+      - wuzapidata:/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://127.0.0.1:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    deploy:
+      <<: *restart
+      resources: { limits: { memory: 256M } }
+
+  # motor gosom/google-maps-scraper (MIT). A API dele não tem autenticação: fica só na rede interna.
+  google-maps-scraper:
+    image: gosom/google-maps-scraper:v1.18.1
+    command: ["-web", "-data-folder", "/gmapsdata"]
+    volumes:
+      - gmaps_data:/gmapsdata
+      - gmaps_cache:/opt
+      - type: tmpfs
+        target: /dev/shm
+        tmpfs: { size: 536870912 }
+    networks: [backend]
+    deploy:
+      <<: *restart
+      resources: { limits: { memory: 1536M } }
+
+  platform-api:
+    image: prospecta/api:local
+    init: true
+    environment:
+      <<: *api-env
+      ROLE: api
+      PORT: 4000
+    networks: [backend, edge]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    deploy:
+      <<: *restart
+      resources: { limits: { memory: 512M } }
+
+  platform-worker:
+    image: prospecta/api:local
+    init: true
+    command: ["node", "dist/worker.js"]
+    environment:
+      <<: *api-env
+      ROLE: worker
+    volumes:
+      - type: tmpfs
+        target: /dev/shm
+        tmpfs: { size: 1073741824 }
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/worker-alive && find /tmp/worker-alive -mmin -2 | grep -q worker-alive"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+    deploy:
+      <<: *restart
+      resources: { limits: { memory: 2048M } }
+
+  platform-web:
+    image: prospecta/web:local
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    networks: [edge]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    deploy:
+      <<: *restart
+      resources: { limits: { memory: 384M } }
+
+  # único ponto de entrada: o Traefik existente entrega o domínio a este gateway pela rede dele
+  platform-gateway:
+    image: nginx:1.30-alpine
+    volumes:
+      - ${PROSPECTA_DIR:?defina PROSPECTA_DIR no .env (pasta do projeto no servidor)}/platform/gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${PROSPECTA_DIR}/platform/deploy/realip.conf:/etc/nginx/prospecta.d/realip.conf:ro
+    networks: [edge, traefik_public]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    deploy:
+      <<: *restart
+      resources: { limits: { memory: 64M } }
+      labels:
+        traefik.enable: "true"
+        traefik.swarm.network: ${TRAEFIK_NETWORK:?defina TRAEFIK_NETWORK no .env (rede do Traefik)}
+        traefik.http.routers.prospecta.rule: Host(`${DOMAIN:?defina DOMAIN no .env}`)
+        traefik.http.routers.prospecta.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
+        traefik.http.routers.prospecta.tls.certresolver: ${TRAEFIK_CERTRESOLVER:?defina TRAEFIK_CERTRESOLVER no .env}
+        traefik.http.routers.prospecta.service: prospecta
+        traefik.http.routers.prospecta.middlewares: prospecta-hsts
+        traefik.http.middlewares.prospecta-hsts.headers.stsSeconds: "31536000"
+        traefik.http.services.prospecta.loadbalancer.server.port: "80"
+        traefik.http.services.prospecta.loadbalancer.passHostHeader: "true"
+
+networks:
+  backend:
+    driver: overlay
+  edge:
+    driver: overlay
+  traefik_public:
+    external: true
+    name: ${TRAEFIK_NETWORK}
+
+volumes:
+  pgdata:
+  valkeydata:
+  wuzapidata:
+  gmaps_data:
+  gmaps_cache:
