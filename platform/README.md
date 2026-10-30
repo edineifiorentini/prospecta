@@ -7,6 +7,7 @@ Ela fica no diretório `platform/` deste fork do **Google Maps Scraper Kit**. O 
 - Arquitetura: [docs/ARQUITETURA.md](docs/ARQUITETURA.md)
 - Manutenção e operação: [docs/MANUTENCAO.md](docs/MANUTENCAO.md)
 - Colocar no ar 24 h numa VPS, com domínio e HTTPS: [docs/DEPLOY-VPS.md](docs/DEPLOY-VPS.md)
+- Prompt pronto para outra pessoa instalar com um assistente de código: [docs/PROMPT-INSTALACAO.md](docs/PROMPT-INSTALACAO.md)
 - Metodologia das pontuações: [docs/METODOLOGIA-PONTUACAO.md](docs/METODOLOGIA-PONTUACAO.md)
 - Inteligência comercial e Análise Comercial com IA: [docs/INTELIGENCIA-COMERCIAL.md](docs/INTELIGENCIA-COMERCIAL.md)
 - Relatório das fases: [docs/fases/](docs/fases/)
