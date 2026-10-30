@@ -70,6 +70,12 @@ Os dados ficam nos volumes `prospecta_pgdata` (banco), `prospecta_wuzapidata` (s
 
 **Contas de clientes.** Cada cliente tem uma conta separada (organização própria): buscas, empresas, CRM e WhatsApp de uma conta nunca aparecem em outra. Só o administrador da plataforma (quem instalou o sistema) cria contas, em *Configurações → Contas*, e lá vê apenas nome, responsável e totais de cada uma. Já *Configurações → Usuários → Convidar* adiciona pessoas à **própria** empresa, com acesso aos mesmos dados. Sem SMTP configurado, as duas telas mostram o link de acesso para copiar e enviar, por exemplo, pelo WhatsApp.
 
+**Limites de pesquisa por conta.** Ao criar uma conta (ou depois, no botão *Limites*), o administrador da plataforma pode definir **pesquisas por dia** (zera à 0h de Brasília, não importa quantas empresas cada uma traga) e um **máximo de empresas** (total trazido por todas as pesquisas da conta). Em branco = sem limite. Importação de CSV não conta.
+- A conta vê o uso na tela de pesquisa e é barrada com o motivo ao chegar no limite.
+- A pesquisa é cortada no saldo de empresas antes de ir ao motor, para ele não procurar além do permitido.
+- Pesquisas em andamento reservam o teto delas, então duas pesquisas simultâneas não furam o limite.
+- Só o administrador da plataforma altera os limites; a mudança fica na trilha de auditoria das duas contas.
+
 No primeiro acesso, um **tour guiado** apresenta as telas principais. O roteiro **Primeiros passos**, no menu lateral, marca sozinho o que já foi feito a partir dos registros reais e mostra o próximo passo. O tour pode ser retomado ou revisto a qualquer momento pelo menu do usuário (Tour guiado).
 
 1. **Encontrar empresas** (*Encontrar Empresas*)

@@ -10,6 +10,7 @@ import { sendMail } from "../../lib/mailer.ts";
 import { orgId } from "../../plugins/auth.ts";
 import { hashPassword } from "../auth/password.ts";
 import { bootstrapOrganization } from "../orgs/bootstrap.ts";
+import { searchLimitsSchema, searchUsage } from "../search/quota.ts";
 
 /**
  * Contas de clientes: cada conta é uma organização separada, com dados próprios.
@@ -48,7 +49,9 @@ export const platformRoutes: FastifyPluginAsyncZod = async (app) => {
         _count: { select: { memberships: true, companies: true, searchJobs: true } },
       },
     });
-    return orgs.map((o) => {
+    // limites e uso de pesquisa de cada conta (só contagens, nunca o conteúdo)
+    const usage = await Promise.all(orgs.map((o) => searchUsage(prisma, o.id)));
+    return orgs.map((o, i) => {
       const owner = o.memberships[0]?.user ?? null;
       return {
         id: o.id,
@@ -60,6 +63,7 @@ export const platformRoutes: FastifyPluginAsyncZod = async (app) => {
         users: o._count.memberships,
         companies: o._count.companies,
         searches: o._count.searchJobs,
+        searchUsage: usage[i],
       };
     });
   });
@@ -71,7 +75,13 @@ export const platformRoutes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         tags: ["platform"],
         summary: "Cria uma conta separada (nova empresa) com o responsável como Proprietário",
-        body: z.object({ organizationName: z.string().trim().min(2).max(120), name: z.string().trim().min(2).max(120), email: z.string().trim().toLowerCase().email() }),
+        body: z.object({
+          organizationName: z.string().trim().min(2).max(120),
+          name: z.string().trim().min(2).max(120),
+          email: z.string().trim().toLowerCase().email(),
+          // opcional: sem limites, a conta pesquisa como a sua
+          limits: searchLimitsSchema.optional(),
+        }),
       },
     },
     async (req, reply) => {
@@ -81,7 +91,10 @@ export const platformRoutes: FastifyPluginAsyncZod = async (app) => {
       // senha aleatória inutilizável: o responsável define a dele pelo link
       const passwordHash = await hashPassword(randomToken(32));
       const { organization, user } = await prisma.$transaction(async (tx) => {
-        const organization = await bootstrapOrganization(tx, b.organizationName);
+        const created = await bootstrapOrganization(tx, b.organizationName);
+        const organization = b.limits
+          ? await tx.organization.update({ where: { id: created.id }, data: { searchDailyLimit: b.limits.searchesPerDay, companyQuota: b.limits.maxCompanies } })
+          : created;
         const user = await tx.user.create({ data: { email: b.email, name: b.name, passwordHash } });
         await tx.membership.create({ data: { userId: user.id, organizationId: organization.id, role: "OWNER" } });
         return { organization, user };
@@ -92,7 +105,7 @@ export const platformRoutes: FastifyPluginAsyncZod = async (app) => {
         `Sua conta ${organization.name} na Prospecta`,
         `Olá, ${user.name}.\n\nSua conta ${organization.name} foi criada na Prospecta. Defina sua senha pelo link abaixo (válido por 72 horas):\n\n${link}\n`,
       );
-      await writeAudit(req, { action: "platform.account_created", entityType: "organization", entityId: organization.id, metadata: { ownerEmail: user.email, emailSent: sent } });
+      await writeAudit(req, { action: "platform.account_created", entityType: "organization", entityId: organization.id, metadata: { ownerEmail: user.email, emailSent: sent, searchesPerDay: organization.searchDailyLimit, maxCompanies: organization.companyQuota } });
       await writeAudit(req, { action: "account.created", organizationId: organization.id, entityType: "organization", entityId: organization.id, metadata: { createdBy: req.auth!.email } });
       return reply.code(201).send({ organizationId: organization.id, userId: user.id, emailSent: sent, inviteLink: link });
     },
@@ -110,6 +123,21 @@ export const platformRoutes: FastifyPluginAsyncZod = async (app) => {
       const link = await issueInviteLink(owner.userId, req.ip);
       await writeAudit(req, { action: "platform.invite_link", entityType: "organization", entityId: req.params.id, metadata: { ownerEmail: owner.user.email } });
       return { inviteLink: link };
+    },
+  );
+
+  app.put(
+    "/platform/accounts/:id/limits",
+    { schema: { tags: ["platform"], summary: "Define os limites de pesquisa da conta (null = sem limite)", params: idParams, body: searchLimitsSchema } },
+    async (req) => {
+      assertPlatformAdmin(req);
+      const org = await prisma.organization.findUnique({ where: { id: req.params.id }, select: { id: true } });
+      if (!org) throw notFound("Conta não encontrada.");
+      await prisma.organization.update({ where: { id: org.id }, data: { searchDailyLimit: req.body.searchesPerDay, companyQuota: req.body.maxCompanies } });
+      await writeAudit(req, { action: "platform.account_limits", entityType: "organization", entityId: org.id, metadata: req.body });
+      // a própria conta também vê na trilha dela que os limites mudaram
+      await writeAudit(req, { action: "account.search_limits", organizationId: org.id, entityType: "organization", entityId: org.id, metadata: { ...req.body, changedBy: req.auth!.email } });
+      return searchUsage(prisma, org.id);
     },
   );
 };

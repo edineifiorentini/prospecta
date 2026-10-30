@@ -28,6 +28,10 @@ model Organization {
   slug      String   @unique
   /// Pesos de pontuação, limites de mensagens, retenção etc. (validado pela API)
   settings  Json     @default("{}")
+  /// Limites de pesquisa definidos só pelo administrador da plataforma (null = sem limite).
+  /// Pesquisas por dia (horário de Brasília) e total de empresas trazidas por pesquisas; CSV não conta.
+  searchDailyLimit Int? @map("search_daily_limit")
+  companyQuota     Int? @map("company_quota")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

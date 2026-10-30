@@ -15,6 +15,7 @@ import { searchFiltersSchema, searchParamsSchema } from "../sources/types.ts";
 import { detectMapping, mapCsvRow, mappingSchema, parseCsv } from "../imports/csv-import.ts";
 import { ADAPTERS, DEFAULT_SOURCE } from "./registry.ts";
 import { csvRowsKey } from "./processor.ts";
+import { applyCap, reserveSearch, searchUsage } from "./quota.ts";
 
 const ACTIVE = ["QUEUED", "SUBMITTED", "RUNNING", "DOWNLOADING", "IMPORTING"] as const;
 const idParams = z.object({ id: z.uuid() });
@@ -62,24 +63,30 @@ export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
     { config: { permission: "search:run", rateLimit: { max: 20, timeWindow: "1 minute" } }, schema: { tags: ["search"], summary: "Cria e enfileira uma busca de empresas", body: searchParamsSchema } },
     async (req, reply) => {
       const organizationId = orgId(req);
-      const params = req.body;
-      await assertCanRun(organizationId, params.provider);
-      const where = [params.neighborhood, params.city, params.state].filter(Boolean).join(", ");
-      const job = await prisma.searchJob.create({
-        data: {
-          organizationId,
-          createdById: req.auth!.userId,
-          provider: params.provider,
-          name: `${params.keyword}${params.nameContains ? ` "${params.nameContains}"` : ""} · ${where}`.slice(0, 200),
-          params: params as unknown as Prisma.InputJsonValue,
-          progress: { phase: "queued", message: "Na fila de processamento." },
-        },
+      await assertCanRun(organizationId, req.body.provider);
+      const where = [req.body.neighborhood, req.body.city, req.body.state].filter(Boolean).join(", ");
+      // limites da conta conferidos e reservados junto com a criação (ver quota.ts)
+      const { job, params } = await prisma.$transaction(async (tx) => {
+        const params = applyCap(req.body, await reserveSearch(tx, organizationId, req.body.limit));
+        const job = await tx.searchJob.create({
+          data: {
+            organizationId,
+            createdById: req.auth!.userId,
+            provider: params.provider,
+            name: `${params.keyword}${params.nameContains ? ` "${params.nameContains}"` : ""} · ${where}`.slice(0, 200),
+            params: params as unknown as Prisma.InputJsonValue,
+            progress: { phase: "queued", message: params.quotaCap ? `Na fila de processamento. Pelo limite da conta, esta pesquisa traz no máximo ${params.quotaCap} empresas.` : "Na fila de processamento." },
+          },
+        });
+        return { job, params };
       });
       await enqueueSearch({ searchJobId: job.id });
-      await writeAudit(req, { action: "search.created", entityType: "search_job", entityId: job.id, metadata: { provider: params.provider, keyword: params.keyword, city: params.city, limit: params.limit } });
-      return reply.code(201).send({ id: job.id });
+      await writeAudit(req, { action: "search.created", entityType: "search_job", entityId: job.id, metadata: { provider: params.provider, keyword: params.keyword, city: params.city, limit: req.body.limit, quotaCap: params.quotaCap ?? null } });
+      return reply.code(201).send({ id: job.id, quotaCap: params.quotaCap ?? null });
     },
   );
+
+  app.get("/searches/quota", { schema: { tags: ["search"], summary: "Limites de pesquisa da conta e quanto já foi usado" } }, async (req) => searchUsage(prisma, orgId(req)));
 
   app.get("/searches", { schema: { tags: ["search"], summary: "Lista buscas e importações", querystring: pageQuery.extend({ status: z.string().optional() }) } }, async (req) => {
     const { page, pageSize, status } = req.query;
@@ -114,9 +121,14 @@ export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
     // buscas de uma fonte desativada (ex.: OpenStreetMap) são repetidas pela fonte habilitada
     const provider = ADAPTERS[job.provider] ? job.provider : DEFAULT_SOURCE;
     await assertCanRun(job.organizationId, provider);
-    const params = { ...(job.params as Record<string, unknown>), provider };
-    const copy = await prisma.searchJob.create({
-      data: { organizationId: job.organizationId, createdById: req.auth!.userId, provider: provider as typeof job.provider, name: job.name, params: params as Prisma.InputJsonValue, progress: { phase: "queued", message: "Na fila de processamento." } },
+    // repetir também conta como pesquisa: mesmos limites da criação
+    const { quotaCap: _old, ...previous } = job.params as Record<string, unknown> & { limit: number; quotaCap?: number };
+    const requested = typeof previous.limit === "number" ? previous.limit : 60;
+    const copy = await prisma.$transaction(async (tx) => {
+      const params = applyCap({ ...previous, limit: requested, provider }, await reserveSearch(tx, job.organizationId, requested));
+      return tx.searchJob.create({
+        data: { organizationId: job.organizationId, createdById: req.auth!.userId, provider: provider as typeof job.provider, name: job.name, params: params as Prisma.InputJsonValue, progress: { phase: "queued", message: "Na fila de processamento." } },
+      });
     });
     await enqueueSearch({ searchJobId: copy.id });
     return reply.code(201).send({ id: copy.id });

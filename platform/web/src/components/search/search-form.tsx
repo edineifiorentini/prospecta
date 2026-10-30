@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, Globe2, Loader2, MapPin, Search, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Gauge, Globe2, Loader2, MapPin, Search, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
@@ -60,6 +60,16 @@ const LIMITS = [10, 20, 40, 60, 100, 200, 300, 500];
 /** O que o mapa da página mostra enquanto o formulário é preenchido. */
 export type AreaPreview = { area: MapArea | null; message: string | null };
 
+/** Limites de pesquisa definidos pelo administrador da plataforma para esta conta. */
+type Quota = { searchesPerDay: number | null; searchesToday: number; maxCompanies: number | null; companiesUsed: number; companiesReserved: number; companiesRemaining: number | null };
+
+function quotaBlock(q: Quota | undefined): string | null {
+  if (!q) return null;
+  if (q.searchesPerDay != null && q.searchesToday >= q.searchesPerDay) return `Limite diário de pesquisas atingido (${q.searchesToday} de ${q.searchesPerDay}). Libera de novo amanhã, à 0h.`;
+  if (q.companiesRemaining === 0) return q.companiesReserved ? "O saldo de empresas desta conta está reservado por pesquisas em andamento. Aguarde terminarem." : `Limite de empresas desta conta atingido (${q.maxCompanies}). Fale com o administrador da plataforma.`;
+  return null;
+}
+
 const RISK_KEY = "prospecta:gmaps-risk-accepted";
 function readRiskAccepted() {
   try {
@@ -74,6 +84,7 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
   const qc = useQueryClient();
   const [showFilters, setShowFilters] = useState(false);
   const sources = useQuery({ queryKey: ["sources"], queryFn: () => api<Source[]>("/sources"), staleTime: 60_000 });
+  const quota = useQuery({ queryKey: ["search-quota"], queryFn: () => api<Quota>("/searches/quota") });
 
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -99,6 +110,7 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
     if (readRiskAccepted()) form.setValue("acceptRisk", true);
   }, [form]);
   const provider = useWatch({ control: form.control, name: "provider" });
+  const limit = useWatch({ control: form.control, name: "limit" });
   const [city, state, neighborhood, country, radiusKm] = useWatch({ control: form.control, name: ["city", "state", "neighborhood", "country", "radiusKm"] });
 
   // pré-visualização da localização (geocodificação no servidor, com cache)
@@ -139,18 +151,26 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
   const create = useMutation({
     mutationFn: (v: z.output<typeof schema>) => {
       const { acceptRisk: _a, ...body } = v;
-      return api<{ id: string }>("/searches", {
+      return api<{ id: string; quotaCap: number | null }>("/searches", {
         method: "POST",
         body: { ...body, nameContains: body.nameContains || undefined, state: body.state || undefined, neighborhood: body.neighborhood || undefined },
       });
     },
     onSuccess: (res) => {
-      toast.success("Busca criada", { description: "Acompanhe o andamento em tempo real." });
+      toast.success("Busca criada", { description: res.quotaCap ? `Pelo limite da conta, esta pesquisa traz no máximo ${res.quotaCap} empresas.` : "Acompanhe o andamento em tempo real." });
       qc.invalidateQueries({ queryKey: ["searches"] });
+      qc.invalidateQueries({ queryKey: ["search-quota"] });
       router.push(`/buscar/${res.id}`);
     },
-    onError: (e) => toast.error("Não foi possível criar a busca", { description: errorMessage(e) }),
+    onError: (e) => {
+      toast.error("Não foi possível criar a busca", { description: errorMessage(e) });
+      qc.invalidateQueries({ queryKey: ["search-quota"] });
+    },
   });
+  const q = quota.data;
+  const blocked = quotaBlock(q);
+  const hasLimits = !!q && (q.searchesPerDay != null || q.maxCompanies != null);
+  const willCap = q?.companiesRemaining != null && q.companiesRemaining > 0 && limit > q.companiesRemaining ? q.companiesRemaining : null;
 
   const onSubmit = form.handleSubmit((v) => create.mutate(schema.parse(v)));
   const errors = form.formState.errors;
@@ -382,9 +402,26 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
         </CollapsibleContent>
       </Collapsible>
 
+      {hasLimits && q && (
+        <Alert className={cn(blocked && "border-destructive/40")}>
+          <Gauge className={cn(blocked ? "text-destructive" : "text-muted-foreground")} />
+          <AlertTitle>Limites desta conta</AlertTitle>
+          <AlertDescription className="text-[13px]">
+            {[
+              q.searchesPerDay != null && `${q.searchesToday} de ${q.searchesPerDay} pesquisas hoje`,
+              q.maxCompanies != null && `${q.companiesUsed + q.companiesReserved} de ${q.maxCompanies} empresas (${q.companiesRemaining} restantes)`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+            {blocked && <span className="mt-1 block font-medium text-destructive">{blocked}</span>}
+            {!blocked && willCap != null && <span className="mt-1 block">Pelo limite, esta pesquisa vai trazer no máximo {willCap} empresas.</span>}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex items-center justify-end gap-3">
         <span className="text-xs text-muted-foreground">As buscas rodam em fila, uma por vez.</span>
-        <Button type="submit" size="lg" disabled={create.isPending}>
+        <Button type="submit" size="lg" disabled={create.isPending || !!blocked}>
           {create.isPending ? <Loader2 className="animate-spin" /> : <Search />}
           Pesquisar
         </Button>

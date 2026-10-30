@@ -71,6 +71,12 @@ export async function processSearchJob(job: Job<SearchJobData>) {
         },
         log: (msg, extra) => log.info(extra ?? {}, msg),
       });
+      // limite de empresas da conta (quota.ts): o motor procura no mínimo 5, o excedente não é gravado
+      const quotaCap = (sj.params as { quotaCap?: number }).quotaCap;
+      if (quotaCap != null && records.length > quotaCap) {
+        records = records.slice(0, quotaCap);
+        await saveProgress({ phase: "importing", message: `Pelo limite de empresas da conta, só as primeiras ${quotaCap} foram mantidas.` });
+      }
       await prisma.searchJob.update({ where: { id }, data: { status: "IMPORTING" } });
     }
 
