@@ -146,18 +146,6 @@ services:
       <<: *api-env
       ROLE: api
       PORT: 4000
-      # Análise Comercial com IA: só a API usa. Chave vazia = provedor desligado; modelo vazio = padrão
-      # (platform/docs/INTELIGENCIA-COMERCIAL.md). A IA também precisa ser ativada por conta na tela.
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
-      XAI_API_KEY: ${XAI_API_KEY:-}
-      XAI_MODEL: ${XAI_MODEL:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_MODEL: ${GROQ_MODEL:-}
     networks: [backend, edge]
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]

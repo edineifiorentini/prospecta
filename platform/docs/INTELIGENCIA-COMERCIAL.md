@@ -102,13 +102,18 @@ São aceitos só estes cinco provedores, pelas APIs oficiais, sem intermediário
   - geração estruturada com timeout, cancelamento e registro de tokens.
 - **Erros:** viram códigos comuns, como chave recusada, limite, timeout, modelo inexistente, recusa e resposta cortada. As mensagens passam por um filtro que remove qualquer coisa parecida com uma chave.
 - **Claude:** nos modelos que aceitam, liga o `fallbacks: "default"` do próprio servidor da Anthropic para recusas. Continua sendo a Anthropic, e o modelo que respondeu fica registrado na análise.
-- **Modelos padrão:** podem ser trocados por `OPENAI_MODEL`, `ANTHROPIC_MODEL`, `XAI_MODEL`, `GEMINI_MODEL` e `GROQ_MODEL`, ou por conta, na tela.
+- **Modelos padrão:** cada conta pode trocar o modelo de cada provedor na tela.
 
-### Chaves: administradas pela plataforma (por enquanto)
+### Chaves: cada conta usa as próprias (desde 30/10/2026)
 
-As chaves ficam só em variáveis de ambiente do servidor: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `XAI_API_KEY`, `GEMINI_API_KEY` e `GROQ_API_KEY`. Elas nunca vão para o navegador, para os registros ou para o Git.
+Cada conta (empresa cliente) cadastra as chaves dos provedores que quiser em Configurações › Inteligência artificial. O uso é cobrado na conta do provedor dona da chave. Não existe chave da instalação: o servidor não lê chave de IA do `.env`.
 
-Cada conta (empresa cliente) escolhe os provedores, os modelos e os limites, mas usa as chaves da instalação. Chaves próprias de cada cliente (BYOK) não foram implementadas, porque exigem armazenamento cifrado e separado por conta, com rotação e revogação. O projeto já tem `encryptSecret` (AES-256-GCM, `lib/crypto.ts`), que pode servir de base quando isso for decidido.
+- **Cifragem:** a chave é guardada na tabela `ai_credentials` cifrada com AES-256-GCM (`encryptSecret`, `lib/crypto.ts`, com `APP_ENCRYPTION_KEY`) e decifrada só em memória, na hora de chamar o provedor. Trocar a `APP_ENCRYPTION_KEY` invalida as chaves cadastradas: elas passam a aparecer como ausentes e precisam ser cadastradas de novo. Os backups do banco levam as chaves cifradas; sem a `APP_ENCRYPTION_KEY` elas não podem ser lidas.
+- **Separação por conta:** uma chave por conta e provedor (`@@unique([organizationId, provider])`). Toda consulta filtra pela conta da sessão; nenhuma análise usa chave de outra conta.
+- **Nunca volta ao navegador:** a tela recebe só se há chave, os 4 últimos caracteres e a data. A chave não vai para registros nem para a trilha de auditoria (que guarda só o provedor e os 4 últimos caracteres).
+- **Quem pode:** só quem tem `settings:manage` (administrador ou proprietário da conta) cadastra, troca ou remove. Os demais veem só o estado.
+- **Validação:** antes de salvar, o servidor lista os modelos do provedor com a chave nova (sem consumir tokens). Chave recusada não é salva.
+- **Remover:** apaga a chave da conta na hora; a IA daquele provedor para de funcionar para a conta.
 
 ### Escolha do provedor
 
@@ -182,7 +187,7 @@ Os testes de integração e o desenvolvimento local da IA usam um Postgres e um 
 
 - **Arquivo:** `platform/compose.teste-isolado.yaml`.
 - **Isolamento:** projeto Compose separado, dados em memória, portas 55432 e 56379.
-- **Segredos:** gerados na hora. As chaves de IA ficam sempre vazias.
+- **Segredos:** gerados na hora. Para um teste real, cadastre a chave na própria tela; ela fica cifrada nesse banco descartável e some com o `down`.
 
 ```bash
 node platform/scripts/teste-isolado.mjs up
@@ -201,7 +206,7 @@ node platform/scripts/teste-isolado.mjs down
 ## 7. Produção
 
 1. **Backup manual do banco** antes de atualizar: a API aplica as migrações sozinha ao subir (`api/docker-entrypoint.sh`).
-2. **Migração:** `20261029200000_analise_comercial_ia` só cria a tabela `ai_analyses` e um enum, sem alterar dados.
-3. **Chaves:** o serviço `platform-api` de `deploy/prospecta-stack.yaml` (e de `compose.yaml`) recebe `OPENAI_*`, `ANTHROPIC_*`, `XAI_*`, `GEMINI_*` e `GROQ_*` do `.env` do servidor; o worker não recebe nenhuma. Depois de pôr a chave no `.env`, rode de novo `sh platform/deploy/swarm-deploy.sh`.
-4. **Ativação por conta:** a IA chega desligada em todas as contas. Ative em Configurações › Inteligência artificial, de preferência primeiro só na conta da própria plataforma: as chaves são da instalação, então o uso de qualquer conta entra na mesma fatura do provedor.
+2. **Migrações:** `20261029200000_analise_comercial_ia` (tabela `ai_analyses` e um enum) e `20261030120000_chaves_ia_por_conta` (tabela `ai_credentials`). Só criam tabelas, sem alterar dados.
+3. **Chaves:** nada no `.env` nem no stack. Cada conta cadastra as próprias na tela. A `APP_ENCRYPTION_KEY` do servidor não pode mudar, ou as chaves cadastradas deixam de valer.
+4. **Ativação por conta:** a IA chega desligada em todas as contas. Cada conta ativa e escolhe o provedor em Configurações › Inteligência artificial, usando a própria chave.
 5. **Provedores testados de verdade:** só a Groq (30/10/2026, `openai/gpt-oss-120b`, US$ 0,0015 a 0,0017 por análise). Os outros quatro passaram só por testes com respostas simuladas; deixe-os sem chave até um teste real.

@@ -1,9 +1,10 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { prisma, type Prisma } from "../../lib/prisma.ts";
-import { notFound } from "../../lib/errors.ts";
+import { notFound, unprocessable } from "../../lib/errors.ts";
 import { writeAudit } from "../../lib/audit-log.ts";
 import { orgId } from "../../plugins/auth.ts";
+import { adaptersFor, credentialStatus, deleteCredential, keyHint, saveCredential } from "../ai/credentials.ts";
 import { toAiError } from "../ai/errors.ts";
 import { providerCatalog, getAdapter } from "../ai/registry.ts";
 import { PRICING } from "../ai/pricing.ts";
@@ -78,12 +79,15 @@ export const intelligenceRoutes: FastifyPluginAsyncZod = async (app) => {
   );
 
   app.get("/ai/settings", { schema: { tags: ["intelligence"], summary: "Provedores de IA disponíveis e configuração da conta (sem chaves)" } }, async (req) => {
-    const org = await prisma.organization.findUniqueOrThrow({ where: { id: orgId(req) }, select: { settings: true } });
+    const organizationId = orgId(req);
+    const org = await prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { settings: true } });
     const settings = readOrgSettings(org.settings);
+    const creds = await credentialStatus(organizationId);
     return {
       settings: settings.ai,
       intelligence: settings.intelligence,
-      providers: providerCatalog(),
+      // só o estado da chave (tem ou não, 4 últimos caracteres e data): o valor nunca sai do servidor
+      providers: providerCatalog(await adaptersFor(organizationId)).map((p) => ({ ...p, ...creds[p.id] })),
       pricing: PRICING,
       segments: SEGMENTS.map((s) => ({ id: s.id, label: s.label })),
       criteria: INTELLIGENCE_CRITERIA,
@@ -105,8 +109,8 @@ export const intelligenceRoutes: FastifyPluginAsyncZod = async (app) => {
     "/ai/providers/:provider/test",
     { config: { permission: "settings:manage", rateLimit: { max: 10, timeWindow: "1 minute" } }, schema: { tags: ["intelligence"], summary: "Testa a conexão listando os modelos (não consome tokens)", params: z.object({ provider: z.enum(AI_PROVIDERS) }) } },
     async (req) => {
-      const adapter = getAdapter(req.params.provider);
-      if (!adapter.isConfigured()) return { ok: false, code: "NOT_CONFIGURED", message: "Sem chave configurada no servidor.", detail: null, models: [] };
+      const adapter = (await adaptersFor(orgId(req)))(req.params.provider);
+      if (!adapter.isConfigured()) return { ok: false, code: "NOT_CONFIGURED", message: "Sem chave cadastrada nesta conta.", detail: null, models: [] };
       const signal = AbortSignal.timeout(15_000);
       try {
         const models = await adapter.listModels(signal);
@@ -116,6 +120,47 @@ export const intelligenceRoutes: FastifyPluginAsyncZod = async (app) => {
         // detail já passou por redactSecrets: é a explicação do provedor, sem a chave
         return { ok: false, code: e.code, message: e.message, detail: e.detail, models: [] };
       }
+    },
+  );
+
+  const providerParams = z.object({ provider: z.enum(AI_PROVIDERS) });
+
+  app.put(
+    "/ai/credentials/:provider",
+    {
+      config: { permission: "settings:manage", rateLimit: { max: 10, timeWindow: "1 minute" } },
+      schema: {
+        tags: ["intelligence"],
+        summary: "Cadastra ou troca a chave do provedor nesta conta (testada antes de salvar; guardada cifrada)",
+        params: providerParams,
+        body: z.object({ apiKey: z.string().trim().min(8, "Chave curta demais.").max(400, "Chave longa demais.").regex(/^\S+$/, "A chave não pode ter espaços.") }),
+      },
+    },
+    async (req) => {
+      const organizationId = orgId(req);
+      const { provider } = req.params;
+      // só salva chave que o provedor aceita (listar modelos não consome tokens)
+      const signal = AbortSignal.timeout(15_000);
+      try {
+        await getAdapter(provider, req.body.apiKey).listModels(signal);
+      } catch (err) {
+        const e = toAiError(err, provider, signal);
+        throw unprocessable(`Chave não salva. ${e.message}${e.detail ? ` Resposta do provedor: ${e.detail}` : ""}`);
+      }
+      const saved = await saveCredential({ organizationId, provider, apiKey: req.body.apiKey, userId: req.auth!.userId });
+      await writeAudit(req, { action: "ai.credential.saved", entityType: "organization", entityId: organizationId, metadata: { provider, keyHint: keyHint(req.body.apiKey) } });
+      return { provider: saved.provider, hasKey: true, keyHint: saved.keyHint, updatedAt: saved.updatedAt };
+    },
+  );
+
+  app.delete(
+    "/ai/credentials/:provider",
+    { config: { permission: "settings:manage" }, schema: { tags: ["intelligence"], summary: "Remove a chave do provedor desta conta", params: providerParams } },
+    async (req) => {
+      const organizationId = orgId(req);
+      const removed = await deleteCredential(organizationId, req.params.provider);
+      if (removed) await writeAudit(req, { action: "ai.credential.removed", entityType: "organization", entityId: organizationId, metadata: { provider: req.params.provider } });
+      return { provider: req.params.provider, hasKey: false, removed };
     },
   );
 };

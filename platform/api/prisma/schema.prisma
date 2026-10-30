@@ -56,6 +56,7 @@ model Organization {
   scores            CompanyScore[]
   fieldSources      CompanyFieldSource[]
   aiAnalyses        AiAnalysis[]
+  aiCredentials     AiCredential[]
 
   @@map("organizations")
 }
@@ -614,7 +615,7 @@ enum AiAnalysisStatus {
   FAILED
 }
 
-/// Análise comercial gerada por IA (OpenAI, Claude, Grok ou Gemini), com procedência, consumo e custo.
+/// Análise comercial gerada por IA (OpenAI, Claude, Grok, Gemini ou Groq), com procedência, consumo e custo.
 model AiAnalysis {
   id              String           @id @default(uuid()) @db.Uuid
   organizationId  String           @map("organization_id") @db.Uuid
@@ -628,7 +629,7 @@ model AiAnalysis {
   promptVersion   String           @map("prompt_version")
   /// hash dos dados enviados + provedor + modelo + versão do prompt (cache)
   inputHash       String           @map("input_hash")
-  /// resultado validado no servidor (contrato comum aos quatro provedores)
+  /// resultado validado no servidor (contrato comum a todos os provedores)
   result          Json?
   /// mensagem revisada por uma pessoa; a sugestão original continua em result
   editedMessage   String?          @map("edited_message")
@@ -653,6 +654,26 @@ model AiAnalysis {
   @@index([organizationId, createdAt])
   @@index([organizationId, companyId, inputHash])
   @@map("ai_analyses")
+}
+
+/// Chave de API de IA de uma conta: cada conta usa só as próprias chaves (nunca as de outra conta
+/// nem as do servidor). Guardada cifrada (AES-256-GCM com APP_ENCRYPTION_KEY) e nunca devolvida ao navegador.
+model AiCredential {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  provider       String
+  /// saída de encryptSecret (v1.<iv>.<tag>.<dados>)
+  encryptedKey   String       @map("encrypted_key")
+  /// últimos 4 caracteres, só para reconhecer qual chave está cadastrada
+  keyHint        String       @map("key_hint")
+  createdById    String?      @map("created_by_id") @db.Uuid
+  updatedById    String?      @map("updated_by_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, provider])
+  @@map("ai_credentials")
 }
 
 // ───────────────────────────── CRM ─────────────────────────────

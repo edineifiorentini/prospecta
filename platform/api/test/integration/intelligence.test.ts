@@ -82,7 +82,7 @@ describe("inteligência comercial", () => {
     expect((await call(admin, "PUT", "/api/ai/settings", AI)).statusCode).toBe(200);
   });
 
-  it("sem chave no servidor, recusa antes de chamar e sem registrar cobrança", async () => {
+  it("sem chave cadastrada na conta, recusa antes de chamar e sem registrar cobrança", async () => {
     const r = await call(admin, "POST", `/api/companies/${companyId}/ai-analyses`, {});
     expect(r.statusCode).toBe(422);
     expect(await prisma.aiAnalysis.count()).toBe(0);
@@ -158,5 +158,74 @@ describe("inteligência comercial", () => {
     expect(r.json()).toMatchObject({ ok: true, models: ["modelo-a", "modelo-b"] });
     expect(spy).not.toHaveBeenCalled();
     expect((await call(admin, "POST", "/api/ai/providers/gemini/test")).json()).toMatchObject({ ok: false, code: "NOT_CONFIGURED" });
+  });
+});
+
+describe("chaves de IA por conta", () => {
+  const CHAVE = "gsk_ChaveDaContaAdmin0123456789abcd";
+  const seen: string[] = [];
+  /** Groq falsa: só aceita CHAVE e registra com qual chave foi chamada. */
+  const groqFake = (apiKey: string): AiProviderAdapter => ({
+    id: "groq",
+    isConfigured: () => !!apiKey,
+    listModels: async () => {
+      if (apiKey !== CHAVE) throw Object.assign(new Error("Incorrect API key provided"), { status: 401 });
+      return ["openai/gpt-oss-120b"];
+    },
+    generateStructured: async (req) => {
+      seen.push(apiKey);
+      return fakeProvider("groq").generateStructured(req);
+    },
+  });
+  const groqOf = (body: { providers: { id: string }[] }) => body.providers.find((p) => p.id === "groq");
+
+  it("chave recusada pelo provedor ou malformada não é salva", async () => {
+    setAdapterForTests("groq", groqFake);
+    const r = await call(admin, "PUT", "/api/ai/credentials/groq", { apiKey: "gsk_errada0123456789" });
+    expect(r.statusCode).toBe(422);
+    expect(r.json().message).toMatch(/recusada/);
+    expect((await call(admin, "PUT", "/api/ai/credentials/groq", { apiKey: "com espaco 0123456789" })).statusCode).toBe(400);
+    expect(await prisma.aiCredential.count()).toBe(0);
+  });
+
+  it("salva cifrada, mostra só o final e nunca devolve a chave", async () => {
+    setAdapterForTests("groq", groqFake);
+    const r = await call(admin, "PUT", "/api/ai/credentials/groq", { apiKey: CHAVE });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ hasKey: true, keyHint: "abcd" });
+    expect(r.body).not.toContain(CHAVE);
+    const row = await prisma.aiCredential.findFirstOrThrow();
+    expect(row.encryptedKey.startsWith("v1.")).toBe(true);
+    expect(row.encryptedKey).not.toContain("ChaveDaContaAdmin");
+    const s = await call(admin, "GET", "/api/ai/settings");
+    expect(s.body).not.toContain(CHAVE);
+    expect(groqOf(s.json())).toMatchObject({ hasKey: true, keyHint: "abcd", configured: true });
+    const audit = await prisma.auditLog.findMany({ where: { action: "ai.credential.saved" } });
+    expect(audit).toHaveLength(1);
+    expect(JSON.stringify(audit)).not.toContain("ChaveDaContaAdmin");
+  });
+
+  it("outra conta não vê, não usa e não apaga a chave", async () => {
+    setAdapterForTests("groq", groqFake);
+    expect(groqOf((await call(other, "GET", "/api/ai/settings")).json())).toMatchObject({ hasKey: false, keyHint: null, configured: false });
+    expect((await call(other, "POST", "/api/ai/providers/groq/test")).json()).toMatchObject({ ok: false, code: "NOT_CONFIGURED" });
+    expect((await call(other, "DELETE", "/api/ai/credentials/groq")).json()).toMatchObject({ removed: false });
+    expect(await prisma.aiCredential.count()).toBe(1);
+  });
+
+  it("a análise usa a chave da própria conta", async () => {
+    setAdapterForTests("groq", groqFake);
+    await call(admin, "PUT", "/api/ai/settings", { ...AI, primaryProvider: "groq" });
+    const r = await call(admin, "POST", `/api/companies/${companyId}/ai-analyses`, { force: true });
+    expect(r.json()).toMatchObject({ status: "SUCCEEDED", provider: "groq" });
+    expect(seen).toEqual([CHAVE]);
+    await call(admin, "PUT", "/api/ai/settings", AI);
+  });
+
+  it("remover apaga a chave e desliga o provedor na conta", async () => {
+    setAdapterForTests("groq", groqFake);
+    expect((await call(admin, "DELETE", "/api/ai/credentials/groq")).json()).toMatchObject({ removed: true, hasKey: false });
+    expect(await prisma.aiCredential.count()).toBe(0);
+    expect((await call(admin, "POST", "/api/ai/providers/groq/test")).json()).toMatchObject({ code: "NOT_CONFIGURED" });
   });
 });

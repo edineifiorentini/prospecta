@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CheckCircle2, KeyRound, Loader2, PlugZap, XCircle } from "lucide-react";
+import { CheckCircle2, ExternalLink, KeyRound, Loader2, PlugZap, Trash2, XCircle } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -39,12 +40,14 @@ type Price = { input: number; output: number; verifiedAt: string; source: string
 type Data = {
   settings: AiSettings;
   intelligence: Intelligence;
-  providers: { id: ProviderId; label: string; keyEnv: string; configured: boolean; defaultModel: string; suggestedModels: string[] }[];
+  providers: Provider[];
   pricing: Record<ProviderId, Record<string, Price>>;
   segments: { id: string; label: string }[];
   methodology: string;
 };
 type TestResult = { ok: boolean; code: string | null; message: string; detail?: string | null; models: string[] };
+/** a chave em si nunca chega aqui: só se existe, os 4 últimos caracteres e a data */
+type Provider = { id: ProviderId; label: string; configured: boolean; defaultModel: string; suggestedModels: string[]; hasKey: boolean; keyHint: string | null; updatedAt: string | null };
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -144,14 +147,10 @@ export function AiSettingsPanel() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-semibold">{p.label}</span>
-                    {p.configured ? <Badge variant="secondary">Chave configurada</Badge> : <Badge variant="outline">Sem chave</Badge>}
+                    {p.hasKey ? <Badge variant="secondary">Chave cadastrada</Badge> : <Badge variant="outline">Sem chave</Badge>}
                     {isPrimary && <Badge>Principal</Badge>}
                   </div>
-                  {!p.configured && (
-                    <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                      <KeyRound className="size-3" /> Defina <code className="font-mono">{p.keyEnv}</code> no servidor para ativar.
-                    </p>
-                  )}
+                  <KeyEditor provider={p} editable={editable} onChanged={() => setTests((x) => ({ ...x, [p.id]: undefined }))} />
                   {tested && (
                     <p className={cn("mt-1 flex items-center gap-1 text-xs", tested.ok ? "text-success" : "text-destructive")}>
                       {tested.ok ? <CheckCircle2 className="size-3.5" /> : <XCircle className="size-3.5" />} {tested.message}
@@ -270,9 +269,9 @@ export function AiSettingsPanel() {
 
       <SectionCard title="Segurança das chaves">
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>As chaves ficam só nas variáveis de ambiente do servidor. Nunca aparecem no navegador, nos registros ou no Git.</li>
-          <li>Todas as contas desta instalação usam as mesmas chaves; cada conta define seus limites e o que pode ser usado.</li>
-          <li>Chaves próprias por cliente ainda não são aceitas: dependem de armazenamento cifrado e separado por conta.</li>
+          <li>Cada conta usa só as próprias chaves: o consumo é cobrado na conta do provedor dona da chave. Nenhuma conta usa a chave de outra.</li>
+          <li>As chaves ficam cifradas (AES-256-GCM) no servidor e nunca voltam para o navegador: aparecem só os 4 últimos caracteres.</li>
+          <li>Só administradores da conta cadastram, trocam ou removem chaves. Cada mudança fica na trilha de auditoria, sem a chave.</li>
           <li>Telefones, e-mails e nomes de perfis não são enviados à IA. Conteúdo de sites vai marcado como não confiável.</li>
         </ul>
       </SectionCard>
@@ -284,6 +283,129 @@ export function AiSettingsPanel() {
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Onde a pessoa consegue a chave de cada provedor (só os que oferecem chave gratuita). */
+const FREE_KEY_URL: Partial<Record<ProviderId, string>> = { groq: "https://console.groq.com/keys" };
+
+/** Cadastro da chave da conta: campo mascarado, testado no servidor antes de salvar. */
+function KeyEditor({ provider: p, editable, onChanged }: { provider: Provider; editable: boolean; onChanged: () => void }) {
+  const qc = useQueryClient();
+  const [value, setValue] = useState("");
+  const [open, setOpen] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const done = () => {
+    setValue("");
+    setOpen(false);
+    onChanged();
+    qc.invalidateQueries({ queryKey: ["ai-settings"] });
+    qc.invalidateQueries({ queryKey: ["ai-estimate"] });
+  };
+  const saveKey = useMutation({
+    mutationFn: () => api(`/ai/credentials/${p.id}`, { method: "PUT", body: { apiKey: value.trim() } }),
+    onSuccess: () => {
+      toast.success(`Chave de ${p.label} validada e salva`);
+      done();
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const removeKey = useMutation({
+    mutationFn: () => api(`/ai/credentials/${p.id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast.success(`Chave de ${p.label} removida`);
+      setConfirmRemove(false);
+      done();
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const since = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString("pt-BR") : null;
+
+  return (
+    <div className="mt-1.5 grid gap-1.5">
+      {p.hasKey ? (
+        <p className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+          <KeyRound className="size-3" /> Termina em <code className="font-mono">…{p.keyHint}</code>
+          {since && ` · validada em ${since}`}
+        </p>
+      ) : (
+        <p className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+          <KeyRound className="size-3" /> {editable ? "Cadastre a chave desta conta para usar este provedor." : "Sem chave nesta conta. Peça a um administrador."}
+        </p>
+      )}
+      {editable && (p.hasKey && !open ? (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+            Trocar chave
+          </Button>
+          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setConfirmRemove(true)}>
+            <Trash2 /> Remover
+          </Button>
+        </div>
+      ) : (
+        <form
+          className="flex flex-wrap gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (value.trim()) saveKey.mutate();
+          }}
+        >
+          <Input
+            type="password"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={`Chave da ${p.label}`}
+            aria-label={`Chave da ${p.label}`}
+            // nunca preencher com a senha de login salva no navegador
+            autoComplete="new-password"
+            spellCheck={false}
+            data-1p-ignore
+            data-lpignore="true"
+            className="h-8 max-w-sm flex-1 font-mono text-xs"
+          />
+          <Button type="submit" size="sm" disabled={!value.trim() || saveKey.isPending}>
+            {saveKey.isPending && <Loader2 className="animate-spin" />} Validar e salvar
+          </Button>
+          {p.hasKey && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => (setOpen(false), setValue(""))}>
+              Cancelar
+            </Button>
+          )}
+        </form>
+      ))}
+      {editable && (!p.hasKey || open) && FREE_KEY_URL[p.id] && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>Ainda não tem chave? A {p.label} oferece chave gratuita: crie a sua e cole aqui.</span>
+          <Button asChild variant="link" size="sm" className="h-auto p-0 text-xs">
+            <a href={FREE_KEY_URL[p.id]} target="_blank" rel="noopener noreferrer">
+              Obter chave gratuita <ExternalLink className="size-3" />
+            </a>
+          </Button>
+        </div>
+      )}
+
+      <AlertDialog open={confirmRemove} onOpenChange={setConfirmRemove}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover a chave de {p.label}?</AlertDialogTitle>
+            <AlertDialogDescription>A chave é apagada desta conta na hora e as análises com {p.label} param de funcionar até uma nova chave ser cadastrada. A remoção fica na trilha de auditoria.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={removeKey.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                removeKey.mutate();
+              }}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              Remover chave
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

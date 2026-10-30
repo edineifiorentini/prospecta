@@ -2,9 +2,10 @@ import { prisma, type Prisma } from "../../../lib/prisma.ts";
 import { redis } from "../../../lib/redis.ts";
 import { sha256 } from "../../../lib/crypto.ts";
 import { badRequest, conflict, unprocessable } from "../../../lib/errors.ts";
+import { adaptersFor } from "../../ai/credentials.ts";
 import { AiError } from "../../ai/errors.ts";
 import { costOf, estimateCost } from "../../ai/pricing.ts";
-import { defaultModel, getAdapter } from "../../ai/registry.ts";
+import { defaultModel, getAdapter, type AdapterLookup } from "../../ai/registry.ts";
 import { AiRunError, runStructured, type Attempt, type PlanStep } from "../../ai/router.ts";
 import { PROVIDER_LABEL, type AiProviderId } from "../../ai/types.ts";
 import { readOrgSettings, type AiSettings } from "../../orgs/settings.ts";
@@ -24,13 +25,14 @@ const modelFor = (s: AiSettings, provider: AiProviderId) => s.models[provider] ?
 /**
  * Plano de provedores. Escolha explícita na tela = só aquele provedor (sem alternância).
  * Sem escolha: provedor principal e, no modo automático, as alternativas autorizadas.
+ * `get` traz os adaptadores com as chaves da conta (alternativa sem chave sai do plano).
  */
-export function buildPlan(s: AiSettings, choice: AnalysisChoice, inputChars: number): PlanStep[] {
+export function buildPlan(s: AiSettings, choice: AnalysisChoice, inputChars: number, get: AdapterLookup = (id) => getAdapter(id)): PlanStep[] {
   if (choice.provider) return [{ provider: choice.provider, model: choice.model?.trim() || modelFor(s, choice.provider) }];
   if (!s.primaryProvider) throw badRequest("Escolha um provedor de IA principal em Configurações › Inteligência artificial.");
   const ids: AiProviderId[] = s.mode === "auto" ? [s.primaryProvider, ...s.fallbackProviders.filter((p) => p !== s.primaryProvider)] : [s.primaryProvider];
   let steps = ids.map((provider) => ({ provider, model: modelFor(s, provider) }));
-  if (s.mode === "auto") steps = steps.filter((st, i) => i === 0 || getAdapter(st.provider).isConfigured());
+  if (s.mode === "auto") steps = steps.filter((st, i) => i === 0 || get(st.provider).isConfigured());
   if (s.mode === "auto" && s.autoPolicy === "lowest_cost") {
     const cost = (st: PlanStep) => estimateCost(st.provider, st.model, inputChars, s.maxOutputTokens).usd ?? Number.POSITIVE_INFINITY;
     steps = [...steps].sort((a, b) => cost(a) - cost(b));
@@ -39,9 +41,9 @@ export function buildPlan(s: AiSettings, choice: AnalysisChoice, inputChars: num
 }
 
 /** Barreira de custo antes de cada provedor. */
-function costGuard(s: AiSettings, inputChars: number) {
+function costGuard(s: AiSettings, inputChars: number, get: AdapterLookup) {
   return (step: PlanStep): AiError | null => {
-    if (!getAdapter(step.provider).isConfigured()) return new AiError("NOT_CONFIGURED", step.provider);
+    if (!get(step.provider).isConfigured()) return new AiError("NOT_CONFIGURED", step.provider);
     const est = estimateCost(step.provider, step.model, inputChars, s.maxOutputTokens);
     if (!est.known && !s.allowUnknownCost) return new AiError("COST_LIMIT", step.provider, `Preço de ${step.model} desconhecido; libere "permitir custo desconhecido" para usar este modelo.`);
     if (est.usd != null && est.usd > s.maxCostUsdPerAnalysis) return new AiError("COST_LIMIT", step.provider, `Estimativa de pior caso US$ ${est.usd.toFixed(4)} acima do limite de US$ ${s.maxCostUsdPerAnalysis.toFixed(2)}.`);
@@ -61,13 +63,14 @@ const hashFor = (step: PlanStep, prompt: { system: string; user: string }) => sh
 export async function estimateAnalysis(organizationId: string, companyId: string, choice: AnalysisChoice) {
   const settings = await aiSettingsOf(organizationId);
   const { inputChars } = await prepare(organizationId, companyId, settings);
-  const plan = buildPlan(settings, choice, inputChars);
-  const guard = costGuard(settings, inputChars);
+  const get = await adaptersFor(organizationId);
+  const plan = buildPlan(settings, choice, inputChars, get);
+  const guard = costGuard(settings, inputChars, get);
   return {
     limitUsd: settings.maxCostUsdPerAnalysis,
     steps: plan.map((st) => {
       const blocked = guard(st);
-      return { provider: st.provider, label: PROVIDER_LABEL[st.provider], model: st.model, configured: getAdapter(st.provider).isConfigured(), estimate: estimateCost(st.provider, st.model, inputChars, settings.maxOutputTokens), blocked: blocked ? { code: blocked.code, message: blocked.detail ?? blocked.message } : null };
+      return { provider: st.provider, label: PROVIDER_LABEL[st.provider], model: st.model, configured: get(st.provider).isConfigured(), estimate: estimateCost(st.provider, st.model, inputChars, settings.maxOutputTokens), blocked: blocked ? { code: blocked.code, message: blocked.detail ?? blocked.message } : null };
     }),
   };
 }
@@ -115,8 +118,10 @@ export async function generateAnalysis(input: { organizationId: string; companyI
   const settings = await aiSettingsOf(input.organizationId);
   if (!settings.enabled) throw badRequest("A análise com IA está desativada. Um administrador pode ativá-la em Configurações › Inteligência artificial.");
   const { intel, evidence, prompt, inputChars } = await prepare(input.organizationId, input.companyId, settings);
-  const plan = buildPlan(settings, input.choice, inputChars);
-  const guard = costGuard(settings, inputChars);
+  // só as chaves desta conta: nenhuma análise usa chave de outra conta
+  const get = await adaptersFor(input.organizationId);
+  const plan = buildPlan(settings, input.choice, inputChars, get);
+  const guard = costGuard(settings, inputChars, get);
   const blocked = plan.map(guard);
   // nenhum provedor pode ser chamado: explica antes, sem registrar tentativa nem gastar nada
   if (blocked.every(Boolean)) throw unprocessable(blocked.map((b, i) => `${PROVIDER_LABEL[plan[i]!.provider]}: ${b!.detail ?? b!.message}`).join(" "));
@@ -141,6 +146,7 @@ export async function generateAnalysis(input: { organizationId: string; companyI
       timeoutMs: settings.timeoutSeconds * 1000,
       maxRetries: settings.maxRetries,
       signal: input.signal,
+      adapterFor: get,
       precheck: guard,
       parse: parseAiOutput,
     });

@@ -1,5 +1,5 @@
 import { AiError, toAiError } from "./errors.ts";
-import { getAdapter } from "./registry.ts";
+import { getAdapter, type AdapterLookup } from "./registry.ts";
 import type { AiProviderId, StructuredRequest, StructuredResponse } from "./types.ts";
 
 /**
@@ -19,6 +19,8 @@ export type RunOptions<T> = {
   timeoutMs: number;
   maxRetries: number;
   signal: AbortSignal;
+  /** adaptadores com as chaves da conta (sem isto, nenhum provedor tem chave) */
+  adapterFor?: AdapterLookup;
   /** bloqueia um passo antes de chamar (ex.: custo acima do limite) */
   precheck?: (step: PlanStep) => AiError | null;
   /** valida o texto devolvido; deve lançar AiError("INVALID_OUTPUT") se não servir */
@@ -55,7 +57,7 @@ export async function runStructured<T>(opts: RunOptions<T>): Promise<RunResult<T
       last = blocked;
       continue;
     }
-    const adapter = getAdapter(step.provider);
+    const adapter = (opts.adapterFor ?? getAdapter)(step.provider);
     for (let retry = 0; retry <= opts.maxRetries; retry++) {
       if (opts.signal.aborted) throw new AiRunError(new AiError("CANCELLED", step.provider), attempts);
       const started = Date.now();

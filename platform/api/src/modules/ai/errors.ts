@@ -16,7 +16,7 @@ export type AiErrorCode =
   | "COST_LIMIT";
 
 const MESSAGES: Record<AiErrorCode, string> = {
-  NOT_CONFIGURED: "Provedor sem chave configurada no servidor.",
+  NOT_CONFIGURED: "Provedor sem chave cadastrada nesta conta (Configurações › Inteligência artificial).",
   AUTH: "A chave do provedor foi recusada (inválida, revogada ou sem permissão).",
   RATE_LIMIT: "O provedor limitou as requisições ou o saldo da conta acabou.",
   TIMEOUT: "O provedor não respondeu dentro do tempo limite.",

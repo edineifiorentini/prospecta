@@ -29,11 +29,5 @@ export function integrationEnv(): Record<string, string> {
     ADMIN_BOOTSTRAP_TOKEN: "integration-bootstrap-token-0123456789",
     SMTP_URL: "smtp://127.0.0.1:1025",
     CRAWLER_ALLOW_HOSTS: "",
-    // chaves de IA nunca chegam aos testes, mesmo que existam no arquivo de origem
-    OPENAI_API_KEY: "",
-    ANTHROPIC_API_KEY: "",
-    XAI_API_KEY: "",
-    GEMINI_API_KEY: "",
-    GROQ_API_KEY: "",
   };
 }

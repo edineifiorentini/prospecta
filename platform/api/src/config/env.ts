@@ -43,18 +43,7 @@ const schema = z.object({
   WUZAPI_WEBHOOK_URL: z.string().url().default("http://platform-api:4000/api/webhooks/wuzapi"),
   /// destinos internos adicionais que o crawler pode acessar (somente testes locais)
   CRAWLER_ALLOW_HOSTS: z.string().optional().default(""),
-  // Inteligência artificial: chaves só no servidor (nunca no navegador, nos logs ou no Git).
-  // Vazia = provedor desativado. Modelo vazio = padrão documentado em modules/ai/registry.ts.
-  OPENAI_API_KEY: z.string().trim().default(""),
-  OPENAI_MODEL: z.string().trim().default(""),
-  ANTHROPIC_API_KEY: z.string().trim().default(""),
-  ANTHROPIC_MODEL: z.string().trim().default(""),
-  XAI_API_KEY: z.string().trim().default(""),
-  XAI_MODEL: z.string().trim().default(""),
-  GEMINI_API_KEY: z.string().trim().default(""),
-  GEMINI_MODEL: z.string().trim().default(""),
-  GROQ_API_KEY: z.string().trim().default(""),
-  GROQ_MODEL: z.string().trim().default(""),
+  // Chaves de IA não ficam aqui: cada conta cadastra as próprias, cifradas no banco (modules/ai/credentials.ts).
 });
 
 export type Env = z.infer<typeof schema>;
