@@ -104,23 +104,19 @@ printf 'PasswordAuthentication no\nPermitRootLogin no\n' > /etc/ssh/sshd_config.
 systemctl restart ssh
 ```
 
-## 4. Baixar o código (repositório privado)
+## 4. Baixar o código
 
-Como o repositório é privado, use uma **chave de implantação** (só leitura), conectado como `prospecta`:
-
-```bash
-ssh-keygen -t ed25519 -C "vps-prospecta" -f ~/.ssh/prospecta_deploy -N ""
-cat ~/.ssh/prospecta_deploy.pub
-```
-
-No GitHub: repositório **prospecta → Settings → Deploy keys → Add deploy key**, cole a chave e **não** marque "Allow write access".
-Depois:
+O repositório é público desde 30/10/2026: não precisa de login nem de chave. Conectado como `prospecta`:
 
 ```bash
-git clone -c core.sshCommand="ssh -i ~/.ssh/prospecta_deploy" -b feat/plataforma-prospeccao \
-  git@github.com:edineifiorentini/prospecta.git ~/prospecta
+git clone -b feat/plataforma-prospeccao https://github.com/edineifiorentini/prospecta.git ~/prospecta
 cd ~/prospecta
 ```
+
+Se o repositório voltar a ser privado, use uma **chave de implantação** (só leitura): gere com
+`ssh-keygen -t ed25519 -C "vps-prospecta" -f ~/.ssh/prospecta_deploy -N ""`, cadastre o conteúdo de `~/.ssh/prospecta_deploy.pub`
+em **prospecta → Settings → Deploy keys → Add deploy key** (sem marcar "Allow write access") e clone com
+`git clone -c core.sshCommand="ssh -i ~/.ssh/prospecta_deploy" -b feat/plataforma-prospeccao git@github.com:edineifiorentini/prospecta.git ~/prospecta`.
 
 (Quando a branch `feat/plataforma-prospeccao` for unida à `master`, troque o `-b` por `master`.)
 

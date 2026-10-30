@@ -6,10 +6,13 @@ Copie o texto abaixo e cole no seu assistente de código (Claude Code ou similar
 
 Você vai instalar o **Prospecta**, uma plataforma de prospecção B2B e CRM que roda inteira em Docker. Trabalhe em português do Brasil e explique cada passo antes de executar.
 
-**Código:** repositório privado `github.com/edineifiorentini/prospecta`, branch `feat/plataforma-prospeccao`. O acesso é só de leitura, por uma chave de implantação (deploy key):
-1. Gere a chave no computador ou servidor onde o Prospecta vai rodar: `ssh-keygen -t ed25519 -C "prospecta-deploy" -f ~/.ssh/prospecta_deploy -N ""`.
-2. Mostre só a chave **pública** (`cat ~/.ssh/prospecta_deploy.pub`) para eu enviar ao dono do repositório. Ele cadastra em Settings → Deploy keys, sem acesso de escrita.
-3. Depois que ele confirmar, clone: `git clone -c core.sshCommand="ssh -i ~/.ssh/prospecta_deploy" -b feat/plataforma-prospeccao git@github.com:edineifiorentini/prospecta.git prospecta`.
+**Código:** repositório público https://github.com/edineifiorentini/prospecta. O Prospecta está na branch `feat/plataforma-prospeccao` (a `master` ainda é o kit original, sem a plataforma). Não precisa de login, senha nem chave. Clone com:
+
+```bash
+git clone -b feat/plataforma-prospeccao https://github.com/edineifiorentini/prospecta.git prospecta
+```
+
+Para atualizar depois: `git pull`, dentro da pasta `prospecta`.
 
 **Antes de instalar, leia:** `CLAUDE.md`, `platform/README.md`, `platform/docs/DEPLOY-VPS.md` e `platform/docs/MANUTENCAO.md`. Siga esses guias; não improvise outra forma de instalar.
 
@@ -21,7 +24,7 @@ Você vai instalar o **Prospecta**, uma plataforma de prospecção B2B e CRM que
 **Regras obrigatórias:**
 1. Gere segredos próprios com `node platform/scripts/init-env.mjs`. Nunca peça nem reutilize o `.env`, senhas, chaves ou backups de outra instalação.
 2. O `.env` nunca vai para o Git. Proteja com `chmod 600 .env` no servidor.
-3. Não faça commit nem push no repositório: o acesso é só de leitura.
+3. Não faça commit nem push no repositório original. Para guardar mudanças suas, use um repositório seu (um fork, por exemplo).
 4. Não exponha à internet o banco, o Valkey, o WuzAPI nem o motor do Google Maps. Só o gateway (local) ou o Caddy/Traefik (VPS) ficam acessíveis.
 5. Depois do primeiro uso, a `APP_ENCRYPTION_KEY` do `.env` não pode mudar: ela protege os tokens do WhatsApp e as chaves de IA cadastradas pelas contas. Guarde uma cópia segura dela.
 6. Não digite nem peça senhas ou chaves de API por mim. Quando precisar de uma, me diga onde colocar e eu coloco.
