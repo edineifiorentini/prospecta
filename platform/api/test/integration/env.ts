@@ -1,8 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 
-/** Ambiente dos testes de integração: banco e fila separados (prospecta_test, Valkey db 15). */
+/**
+ * Ambiente dos testes de integração: banco e fila separados (prospecta_test, Valkey db 15).
+ * Usa o ambiente isolado (platform/.local/teste-isolado.env, gerado por scripts/teste-isolado.mjs);
+ * sem ele, cai no platform/.env.dev. Em qualquer caso o banco precisa da marca de descartável (db-guard.ts).
+ */
 export function integrationEnv(): Record<string, string> {
-  const file = new URL("../../../.env.dev", import.meta.url);
+  const isolated = new URL("../../../.local/teste-isolado.env", import.meta.url);
+  const file = existsSync(isolated) ? isolated : new URL("../../../.env.dev", import.meta.url);
   if (!existsSync(file)) return {};
   const env = Object.fromEntries(
     readFileSync(file, "utf8")
@@ -24,5 +29,11 @@ export function integrationEnv(): Record<string, string> {
     ADMIN_BOOTSTRAP_TOKEN: "integration-bootstrap-token-0123456789",
     SMTP_URL: "smtp://127.0.0.1:1025",
     CRAWLER_ALLOW_HOSTS: "",
+    // chaves de IA nunca chegam aos testes, mesmo que existam no arquivo de origem
+    OPENAI_API_KEY: "",
+    ANTHROPIC_API_KEY: "",
+    XAI_API_KEY: "",
+    GEMINI_API_KEY: "",
+    GROQ_API_KEY: "",
   };
 }

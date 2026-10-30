@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../src/app.ts";
 import { prisma } from "../../src/lib/prisma.ts";
 import { redis } from "../../src/lib/redis.ts";
+import { assertDisposableDb } from "./db-guard.ts";
 
 export type Agent = { cookie: string; csrf: string; userId: string; organizationId: string };
 
@@ -12,8 +13,14 @@ export async function getApp() {
   return app;
 }
 
+let guarded = false;
+
 /** Limpa todas as tabelas do banco de teste (ordem respeitando chaves estrangeiras via TRUNCATE CASCADE). */
 export async function resetDb() {
+  if (!guarded) {
+    await assertDisposableDb();
+    guarded = true;
+  }
   const rows = await prisma.$queryRawUnsafe<{ tablename: string }[]>("SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'");
   await prisma.$executeRawUnsafe(`TRUNCATE ${rows.map((r) => `"${r.tablename}"`).join(", ")} RESTART IDENTITY CASCADE`);
   await redis.flushdb();
@@ -41,7 +48,7 @@ export async function agentFromLogin(email: string, password: string): Promise<A
   return { cookie, csrf: s.csrfToken, userId: s.user.id, organizationId: s.organization.id };
 }
 
-export async function call(agent: Agent | null, method: "GET" | "POST" | "PATCH" | "DELETE", url: string, payload?: unknown) {
+export async function call(agent: Agent | null, method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", url: string, payload?: unknown) {
   const a = await getApp();
   return a.inject({
     method,

@@ -11,6 +11,8 @@ export type Permission =
   | "import:run"
   | "enrich:run"
   | "audit:run"
+  /** gerar análise comercial com IA (consome tokens dentro dos limites da conta) */
+  | "ai:run"
   | "export:run"
   | "messages:send"
   | "messages:approve"
@@ -21,7 +23,7 @@ export type Permission =
   | "privacy:manage"
   | "auditlog:read";
 
-const SALES: Permission[] = ["read", "crm:write", "tasks:write", "companies:write", "enrich:run", "audit:run", "messages:send", "consent:manage"];
+const SALES: Permission[] = ["read", "crm:write", "tasks:write", "companies:write", "enrich:run", "audit:run", "ai:run", "messages:send", "consent:manage"];
 const MANAGER: Permission[] = [...SALES, "search:run", "import:run", "export:run", "messages:approve", "auditlog:read"];
 const ADMIN: Permission[] = [...MANAGER, "companies:delete", "messaging:manage", "settings:manage", "users:manage", "privacy:manage"];
 

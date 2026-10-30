@@ -9,6 +9,8 @@ const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   ROLE: z.enum(["api", "worker", "cli"]).default("api"),
   PORT: z.coerce.number().int().default(4000),
+  // 0.0.0.0 no contêiner; o ambiente de teste isolado usa 127.0.0.1
+  HOST: z.string().default("0.0.0.0"),
   LOG_LEVEL: z.string().default("info"),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
@@ -41,6 +43,18 @@ const schema = z.object({
   WUZAPI_WEBHOOK_URL: z.string().url().default("http://platform-api:4000/api/webhooks/wuzapi"),
   /// destinos internos adicionais que o crawler pode acessar (somente testes locais)
   CRAWLER_ALLOW_HOSTS: z.string().optional().default(""),
+  // Inteligência artificial: chaves só no servidor (nunca no navegador, nos logs ou no Git).
+  // Vazia = provedor desativado. Modelo vazio = padrão documentado em modules/ai/registry.ts.
+  OPENAI_API_KEY: z.string().trim().default(""),
+  OPENAI_MODEL: z.string().trim().default(""),
+  ANTHROPIC_API_KEY: z.string().trim().default(""),
+  ANTHROPIC_MODEL: z.string().trim().default(""),
+  XAI_API_KEY: z.string().trim().default(""),
+  XAI_MODEL: z.string().trim().default(""),
+  GEMINI_API_KEY: z.string().trim().default(""),
+  GEMINI_MODEL: z.string().trim().default(""),
+  GROQ_API_KEY: z.string().trim().default(""),
+  GROQ_MODEL: z.string().trim().default(""),
 });
 
 export type Env = z.infer<typeof schema>;

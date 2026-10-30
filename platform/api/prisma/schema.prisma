@@ -55,6 +55,7 @@ model Organization {
   auditLogs         AuditLog[]
   scores            CompanyScore[]
   fieldSources      CompanyFieldSource[]
+  aiAnalyses        AiAnalysis[]
 
   @@map("organizations")
 }
@@ -248,6 +249,7 @@ model Company {
   listItems      CompanyListItem[]
   conversations  Conversation[]
   consents       ContactConsent[]
+  aiAnalyses     AiAnalysis[]
 
   @@index([organizationId, status])
   @@index([organizationId, normName])
@@ -603,6 +605,54 @@ model CompanyScore {
   @@unique([companyId, kind])
   @@index([organizationId, kind, score])
   @@map("company_scores")
+}
+
+// ───────────────────────── Inteligência comercial ─────────────────────────
+
+enum AiAnalysisStatus {
+  SUCCEEDED
+  FAILED
+}
+
+/// Análise comercial gerada por IA (OpenAI, Claude, Grok ou Gemini), com procedência, consumo e custo.
+model AiAnalysis {
+  id              String           @id @default(uuid()) @db.Uuid
+  organizationId  String           @map("organization_id") @db.Uuid
+  companyId       String           @map("company_id") @db.Uuid
+  requestedById   String?          @map("requested_by_id") @db.Uuid
+  status          AiAnalysisStatus
+  /// provedor e modelo que efetivamente responderam (null quando todas as tentativas falharam)
+  provider        String?
+  model           String?
+  requestedModel  String?          @map("requested_model")
+  promptVersion   String           @map("prompt_version")
+  /// hash dos dados enviados + provedor + modelo + versão do prompt (cache)
+  inputHash       String           @map("input_hash")
+  /// resultado validado no servidor (contrato comum aos quatro provedores)
+  result          Json?
+  /// mensagem revisada por uma pessoa; a sugestão original continua em result
+  editedMessage   String?          @map("edited_message")
+  editedById      String?          @map("edited_by_id") @db.Uuid
+  editedAt        DateTime?        @map("edited_at")
+  inputTokens     Int?             @map("input_tokens")
+  outputTokens    Int?             @map("output_tokens")
+  reasoningTokens Int?             @map("reasoning_tokens")
+  /// null = custo desconhecido (preço não confirmado ou tokens não informados)
+  costUsd         Float?           @map("cost_usd")
+  costBasis       String?          @map("cost_basis")
+  /// tentativas por provedor (alternância automática fica registrada aqui)
+  attempts        Json             @default("[]")
+  errorCode       String?          @map("error_code")
+  error           String?
+  durationMs      Int?             @map("duration_ms")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, companyId, inputHash])
+  @@map("ai_analyses")
 }
 
 // ───────────────────────────── CRM ─────────────────────────────

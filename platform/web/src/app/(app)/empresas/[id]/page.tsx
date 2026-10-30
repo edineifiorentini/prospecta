@@ -23,6 +23,7 @@ import { Timeline } from "@/components/company/timeline";
 import { NotesPanel } from "@/components/company/notes-panel";
 import { CrmCard, ScoresCard, TagsCard } from "@/components/company/side-cards";
 import { CompanyAuditPanel } from "@/components/audit/company-audit-panel";
+import { CompanyIntelligencePanel } from "@/components/company/intelligence-panel";
 import { CompanyConversations } from "@/components/messaging/company-conversations";
 import { TaskComposer, TaskList } from "@/components/tasks/task-list";
 import type { CompanyDetail } from "@/components/company/types";
@@ -31,7 +32,7 @@ import { fmtDateTime, fmtMoney, fmtNumber, fmtRating } from "@/lib/format";
 import { LeadMap } from "@/components/map/lead-map";
 import { useSession } from "@/lib/session";
 
-const TABS = ["visao-geral", "atividades", "tarefas", "anotacoes", "negociacoes", "auditoria", "conversas"] as const;
+const TABS = ["visao-geral", "inteligencia", "atividades", "tarefas", "anotacoes", "negociacoes", "auditoria", "conversas"] as const;
 
 export default function CompanyPage() {
   const { id } = useParams<{ id: string }>();
@@ -180,6 +181,7 @@ export default function CompanyPage() {
         <Tabs value={tab} onValueChange={setTab} className="min-w-0">
           <TabsList className="mb-4 flex-wrap">
             <TabsTrigger value="visao-geral">Visão geral</TabsTrigger>
+            <TabsTrigger value="inteligencia">Inteligência comercial</TabsTrigger>
             <TabsTrigger value="atividades">Atividades</TabsTrigger>
             <TabsTrigger value="tarefas">Tarefas</TabsTrigger>
             <TabsTrigger value="anotacoes">Anotações</TabsTrigger>
@@ -289,6 +291,10 @@ export default function CompanyPage() {
                 </ul>
               )}
             </SectionCard>
+          </TabsContent>
+
+          <TabsContent value="inteligencia">
+            <CompanyIntelligencePanel companyId={c.id} />
           </TabsContent>
 
           <TabsContent value="auditoria">

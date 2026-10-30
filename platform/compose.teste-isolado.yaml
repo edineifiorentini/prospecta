@@ -1,0 +1,38 @@
+# Banco e fila DESCARTÁVEIS para testes de integração e desenvolvimento local.
+# Projeto Compose separado: não compartilha volumes, rede nem portas com a stack "prospecta".
+# Os dados ficam em memória (tmpfs) e somem quando os contêineres param.
+#
+#   node platform/scripts/teste-isolado.mjs up     # sobe e grava platform/.local/teste-isolado.env
+#   node platform/scripts/teste-isolado.mjs down   # derruba e apaga tudo
+#
+# O banco recebe a marca "prospecta:descartavel" (COMMENT ON DATABASE). Os testes de integração
+# se recusam a migrar ou limpar qualquer banco que não tenha essa marca.
+name: prospecta-teste-isolado
+
+services:
+  postgres-teste:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: teste
+      POSTGRES_PASSWORD: teste-isolado
+      POSTGRES_DB: prospecta_test
+    ports: ["127.0.0.1:55432:5432"]
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./scripts/teste-isolado/marcar-descartavel.sql:/docker-entrypoint-initdb.d/10-marcar-descartavel.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U teste -d prospecta_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  valkey-teste:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    ports: ["127.0.0.1:56379:6379"]
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep -q PONG"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

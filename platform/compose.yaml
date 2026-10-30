@@ -120,6 +120,17 @@ services:
       <<: *api-env
       ROLE: api
       PORT: 4000
+      # Análise Comercial com IA (chave vazia = provedor desligado; ver docs/INTELIGENCIA-COMERCIAL.md)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      XAI_MODEL: ${XAI_MODEL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-}
     depends_on:
       postgres: { condition: service_healthy }
       valkey: { condition: service_healthy }
