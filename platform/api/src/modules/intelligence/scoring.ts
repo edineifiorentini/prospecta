@@ -1,5 +1,5 @@
 /**
- * Inteligência comercial — três indicadores independentes (metodologia 2026.10-ic1).
+ * Inteligência comercial — três indicadores independentes (metodologia 2026.11-ic2).
  * Documentação: platform/docs/INTELIGENCIA-COMERCIAL.md
  *
  * - Cada critério tem peso configurável e resultado MET (100%), PARTIAL (50%), NOT_MET (0%)
@@ -7,17 +7,19 @@
  * - Nota do indicador = 100 × Σ(peso × crédito) / Σ(peso avaliado).
  * - Cobertura = Σ(peso avaliado) / Σ(peso total). Abaixo da cobertura mínima, a nota fica nula.
  * - Cada critério cita as evidências que usou; dentro de um indicador, uma evidência pontua uma vez só.
+ * - Critérios de dados empresariais (requires: "business") só existem para empresas enriquecidas:
+ *   sem perfil, eles nem entram no peso total, e a nota fica igual à da metodologia anterior (ic1).
  * - Prioridade consolidada: média ponderada dos três indicadores com limites para A e B,
- *   ou "Necessita qualificação" quando faltam dados essenciais.
+ *   ou "Necessita qualificação" quando faltam dados essenciais. CNPJ inativo limita a prioridade a C.
  */
-import type { CompanyFacts, CompanySnapshot } from "./evidence.ts";
+import { rangeText, type CompanyFacts, type CompanySnapshot } from "./evidence.ts";
 
-export const INTELLIGENCE_METHODOLOGY = "2026.10-ic1";
+export const INTELLIGENCE_METHODOLOGY = "2026.11-ic2";
 
 export type IndicatorId = "FIT" | "OPPORTUNITY" | "RELIABILITY";
 export type CriterionResult = "MET" | "PARTIAL" | "NOT_MET" | "NOT_EVALUATED";
 
-export type CriterionDef = { key: string; indicator: IndicatorId; label: string; weight: number };
+export type CriterionDef = { key: string; indicator: IndicatorId; label: string; weight: number; requires?: "business" };
 
 export const INTELLIGENCE_CRITERIA: CriterionDef[] = [
   { key: "fit.segment", indicator: "FIT", label: "Segmento dentro do perfil de cliente ideal", weight: 30 },
@@ -25,12 +27,14 @@ export const INTELLIGENCE_CRITERIA: CriterionDef[] = [
   { key: "fit.channels", indicator: "FIT", label: "Presença em outros canais (telefone, e-mail, site, redes)", weight: 20 },
   { key: "fit.movement", indicator: "FIT", label: "Movimento público (volume de avaliações)", weight: 15 },
   { key: "fit.capture", indicator: "FIT", label: "Indícios de captação comercial no site", weight: 15 },
+  { key: "fit.size", indicator: "FIT", label: "Porte e equipe compatíveis com o perfil (dados empresariais)", weight: 15, requires: "business" },
 
   { key: "opp.whatsapp_lines", indicator: "OPPORTUNITY", label: "Mais de um WhatsApp divulgado", weight: 30 },
   { key: "opp.other_lines", indicator: "OPPORTUNITY", label: "Outras linhas de telefone divulgadas", weight: 20 },
   { key: "opp.written_channels", indicator: "OPPORTUNITY", label: "Canais de mensagem distribuídos (e-mail, Instagram, Facebook)", weight: 15 },
   { key: "opp.entry_points", indicator: "OPPORTUNITY", label: "Entradas diferentes de contatos (formulário, agendamento, pedidos)", weight: 15 },
   { key: "opp.segment_need", indicator: "OPPORTUNITY", label: "Necessidade típica do segmento (hipótese de mercado)", weight: 20 },
+  { key: "opp.scale", indicator: "OPPORTUNITY", label: "Escala da operação (equipe e unidades, dados empresariais)", weight: 15, requires: "business" },
 
   { key: "rel.official", indicator: "RELIABILITY", label: "Contato confirmado no site oficial", weight: 25 },
   { key: "rel.cross_source", indicator: "RELIABILITY", label: "Telefone confirmado por duas fontes", weight: 20 },
@@ -38,6 +42,7 @@ export const INTELLIGENCE_CRITERIA: CriterionDef[] = [
   { key: "rel.completeness", indicator: "RELIABILITY", label: "Dados essenciais completos", weight: 20 },
   { key: "rel.consistency", indicator: "RELIABILITY", label: "Fontes sem contradições", weight: 10 },
   { key: "rel.collection", indicator: "RELIABILITY", label: "Coleta sem dados inválidos", weight: 10 },
+  { key: "rel.registry", indicator: "RELIABILITY", label: "Cadastro oficial confirmado (CNPJ ativo)", weight: 15, requires: "business" },
 ];
 
 export type IntelligenceConfig = {
@@ -45,6 +50,9 @@ export type IntelligenceConfig = {
   criteriaWeights: Record<string, number>;
   indicatorWeights: Record<IndicatorId, number>;
   thresholds: { a: number; b: number; minReliability: number; minCoverage: number };
+  /** portes-alvo e faixa ideal de funcionários (só pesam com dados empresariais) */
+  targetSizes: string[];
+  idealEmployees: { min: number; max: number };
 };
 
 export const DEFAULT_INTELLIGENCE_CONFIG: IntelligenceConfig = {
@@ -52,6 +60,8 @@ export const DEFAULT_INTELLIGENCE_CONFIG: IntelligenceConfig = {
   criteriaWeights: {},
   indicatorWeights: { FIT: 45, OPPORTUNITY: 35, RELIABILITY: 20 },
   thresholds: { a: 70, b: 50, minReliability: 40, minCoverage: 0.5 },
+  targetSizes: ["MICRO", "PEQUENO", "MEDIO"],
+  idealEmployees: { min: 2, max: 500 },
 };
 
 export type CriterionOutcome = {
@@ -185,6 +195,43 @@ function evaluateCriteria(c: CompanySnapshot, f: CompanyFacts, cfg: Intelligence
   const collectionProblems = [f.phones.rejected.length && `${f.phones.rejected.length} telefone(s) inválido(s)`, f.website.state === "INVALID_URL" && "endereço de site inválido"].filter(Boolean);
   out["rel.collection"] = collectionProblems.length >= 2 ? notMet(`Problemas: ${collectionProblems.join("; ")}.`) : collectionProblems.length === 1 ? partial(`Problema: ${collectionProblems[0]}.`) : met("Nenhum dado inválido nas fontes.");
 
+  // ── Dados empresariais (só para empresas enriquecidas) ──
+  const b = c.business;
+  if (b) {
+    const emp = b.employees;
+    const empText = emp ? `${rangeText(emp)}${emp.nature === "ESTIMATED" ? " (estimado)" : ""}` : "";
+    const lo = emp ? (emp.value ?? emp.min ?? 0) : 0;
+    const hi = emp ? (emp.value ?? emp.max ?? Number.POSITIVE_INFINITY) : 0;
+    const ideal = cfg.idealEmployees;
+    if (emp && (emp.min != null || emp.max != null || emp.value != null)) {
+      const inside = lo >= ideal.min && hi <= ideal.max;
+      const overlap = hi >= ideal.min && lo <= ideal.max;
+      out["fit.size"] = inside
+        ? met(`Funcionários ${empText}: dentro da faixa ideal (${ideal.min} a ${ideal.max}).`, ["biz.employees"])
+        : overlap
+          ? partial(`Funcionários ${empText}: parte dentro da faixa ideal (${ideal.min} a ${ideal.max}).`, ["biz.employees"])
+          : notMet(`Funcionários ${empText}: fora da faixa ideal (${ideal.min} a ${ideal.max}).`, ["biz.employees"]);
+    } else if (b.size) {
+      out["fit.size"] = cfg.targetSizes.includes(b.size) ? partial(`Porte ${b.size.toLowerCase()} entre os portes-alvo (classificação estimada; sem faixa de funcionários).`, ["biz.size"]) : notMet(`Porte ${b.size.toLowerCase()} fora dos portes-alvo da conta.`, ["biz.size"]);
+    } else out["fit.size"] = na("O fornecedor não informou porte nem funcionários.");
+
+    const units = b.units ?? 0;
+    const unitKeys = units > 1 ? ["biz.units"] : [];
+    if (emp && (emp.min != null || emp.value != null)) {
+      out["opp.scale"] =
+        lo >= 10 || units > 1
+          ? met(`Equipe ${empText}${units > 1 ? ` e ${units} unidades` : ""}: mais gente atendendo clientes (a confirmar na conversa).`, ["biz.employees", ...unitKeys])
+          : lo >= 3
+            ? partial(`Equipe ${empText}: atendimento provavelmente dividido entre poucas pessoas.`, ["biz.employees"])
+            : notMet(`Equipe ${empText}: talvez uma só pessoa atenda.`, ["biz.employees"]);
+    } else if (units > 1) out["opp.scale"] = met(`${units} unidades no grupo.`, unitKeys);
+    else out["opp.scale"] = na("Sem faixa de funcionários nem unidades informadas.");
+
+    if (!b.registrationStatus) out["rel.registry"] = na("O cadastro não informou a situação do CNPJ.");
+    else if (b.registrationStatus === "ATIVA") out["rel.registry"] = met(`CNPJ ativo na Receita${b.simulated ? " (dado simulado)" : ""}.`, ["biz.registry"]);
+    else out["rel.registry"] = notMet(`CNPJ com situação ${b.registrationStatus} na Receita.`, ["biz.registry"]);
+  }
+
   return out;
 }
 
@@ -202,7 +249,8 @@ export function scoreCompany(c: CompanySnapshot, f: CompanyFacts, cfg: Intellige
     let earned = 0;
     const used = new Set<string>();
     const criteria: CriterionOutcome[] = [];
-    for (const def of INTELLIGENCE_CRITERIA.filter((d) => d.indicator === id)) {
+    // sem perfil empresarial, os critérios desse tipo não existem para a empresa (nem no peso total)
+    for (const def of INTELLIGENCE_CRITERIA.filter((d) => d.indicator === id && (!d.requires || c.business))) {
       const weight = cfg.criteriaWeights[def.key] ?? def.weight;
       const e = evals[def.key] ?? na("Critério não avaliado.");
       // evidência já usada por outro critério do mesmo indicador não pontua de novo
@@ -236,6 +284,12 @@ export function scoreCompany(c: CompanySnapshot, f: CompanyFacts, cfg: Intellige
     composite = Math.round(w.FIT * indicators.FIT.score! + w.OPPORTUNITY * indicators.OPPORTUNITY.score! + w.RELIABILITY * indicators.RELIABILITY.score!);
     priority = composite >= cfg.thresholds.a ? "A" : composite >= cfg.thresholds.b ? "B" : "C";
     reasons.push(`Média ponderada ${composite} (A a partir de ${cfg.thresholds.a}, B a partir de ${cfg.thresholds.b}).`);
+  }
+  // problema confirmado no cadastro oficial (não é ausência de dado): limita a prioridade
+  const status = c.business?.registrationStatus;
+  if (status && status !== "ATIVA") {
+    if (priority === "A" || priority === "B") priority = "C";
+    reasons.push(`CNPJ com situação ${status} na Receita: prioridade limitada a C até confirmar se a empresa ainda opera.`);
   }
   return { methodology: INTELLIGENCE_METHODOLOGY, computedAt: now.toISOString(), indicators, priority, composite, priorityReasons: reasons };
 }

@@ -1,4 +1,6 @@
 import { fold, safeHttpUrl } from "../../lib/normalize.ts";
+import { formatCnpj } from "../company-data/cnpj.ts";
+import type { DataNature } from "../company-data/types.ts";
 import { analyzePhones, type PhoneAnalysis, type PhoneInput } from "./phones.ts";
 import { detectSegment, type SegmentMatch } from "./segments.ts";
 
@@ -47,7 +49,43 @@ export type CompanySnapshot = {
   auditAt: Date | null;
   /** outras empresas da mesma conta que parecem ser a mesma */
   duplicateCandidates: { id: string; name: string; reason: string }[];
+  /** dados empresariais já identificados e enriquecidos (Econodata); ausente = critérios desse tipo não entram */
+  business?: BusinessSnapshot | null;
 };
+
+export type BusinessRange = { min: number | null; max: number | null; value: number | null; nature: DataNature };
+
+export type BusinessSnapshot = {
+  provider: string;
+  simulated: boolean;
+  fetchedAt: string;
+  cnpj: string;
+  registrationStatus: string | null;
+  openedAt: string | null;
+  primaryCnae: { code: string | null; description: string | null } | null;
+  /** porte segundo o fornecedor (estimado) */
+  size: string | null;
+  employees: BusinessRange | null;
+  revenue: BusinessRange | null;
+  foreignTrade: { exportYears: string[]; importYears: string[] } | null;
+  /** unidades conhecidas do grupo (matriz + filiais), quando consultadas */
+  units: number | null;
+};
+
+const fmtInt = (n: number) => n.toLocaleString("pt-BR");
+const fmtMoney = (n: number) => (n >= 1_000_000 ? `R$ ${(n / 1_000_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi` : n >= 1000 ? `R$ ${(n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 0 })} mil` : `R$ ${fmtInt(n)}`);
+
+/** Faixa legível: "10 a 19", "até 19", "10 ou mais" ou "cerca de 15". */
+export function rangeText(r: { min: number | null; max: number | null; value: number | null }, money = false) {
+  const f = money ? fmtMoney : fmtInt;
+  if (r.min != null && r.max != null) return `${f(r.min)} a ${f(r.max)}`;
+  if (r.max != null) return `até ${f(r.max)}`;
+  if (r.min != null) return `${f(r.min)} ou mais`;
+  return r.value != null ? `cerca de ${f(r.value)}` : "não informado";
+}
+
+const natureText = (n: DataNature) => (n === "ESTIMATED" ? "estimado pelo fornecedor" : n === "DECLARED" ? "declarado" : n === "OFFICIAL" ? "oficial" : "observado");
+const SIZE_LABEL: Record<string, string> = { INDIVIDUAL: "individual", MICRO: "micro", PEQUENO: "pequeno", MEDIO: "médio", GRANDE: "grande" };
 
 export type WebsiteState = "NONE" | "INVALID_URL" | "NOT_CHECKED" | "REACHABLE" | "BLOCKED" | "UNREACHABLE";
 
@@ -97,7 +135,7 @@ function findContradictions(c: CompanySnapshot): CompanyFacts["contradictions"] 
 }
 
 const SOCIAL_LABEL: Record<string, string> = { INSTAGRAM: "Instagram", FACEBOOK: "Facebook", LINKEDIN: "LinkedIn", TIKTOK: "TikTok", YOUTUBE: "YouTube", X: "X", THREADS: "Threads", PINTEREST: "Pinterest" };
-const SOURCE_LABEL: Record<string, string> = { GOOGLE_MAPS_SCRAPER: "ficha do Google Maps", WEBSITE: "site oficial", MANUAL: "registro manual", CSV_IMPORT: "importação", OSM_OVERPASS: "OpenStreetMap", BRASILAPI_CNPJ: "BrasilAPI (CNPJ)", SYSTEM: "Prospecta" };
+const SOURCE_LABEL: Record<string, string> = { GOOGLE_MAPS_SCRAPER: "ficha do Google Maps", WEBSITE: "site oficial", MANUAL: "registro manual", CSV_IMPORT: "importação", OSM_OVERPASS: "OpenStreetMap", BRASILAPI_CNPJ: "BrasilAPI (CNPJ)", ECONODATA: "Econodata", ECONODATA_SIMULATED: "Econodata (simulado)", SYSTEM: "Prospecta" };
 export const sourceLabel = (s: string) => SOURCE_LABEL[s] ?? s;
 
 export function collectFacts(c: CompanySnapshot): CompanyFacts {
@@ -108,17 +146,43 @@ export function collectFacts(c: CompanySnapshot): CompanyFacts {
   const issues: QualityIssue[] = [];
   const googleAt = iso(c.collectedAt);
 
+  const b = c.business ?? null;
+  const bizSource = b?.simulated ? "ECONODATA_SIMULATED" : "ECONODATA";
+
   // ── Segmento ──
-  const segment = detectSegment(c);
+  const segment = detectSegment({ ...c, cnae: b?.primaryCnae?.code ?? null });
   if (segment) {
     add({
       key: "segment",
-      label: `Segmento ${segment.segment.label} identificado pelo termo "${segment.matchedTerm}" ${segment.field === "category" ? "na categoria" : "no nome"}`,
-      kind: segment.field === "category" ? "OBSERVED" : "INFERRED",
-      source: c.hasGoogleSource ? "GOOGLE_MAPS_SCRAPER" : "SYSTEM",
-      sourceUrl: c.sourceUrl,
-      observedAt: googleAt,
+      label:
+        segment.field === "cnae"
+          ? `Segmento ${segment.segment.label} identificado pelo CNAE principal ${segment.matchedTerm} (cadastro oficial)`
+          : `Segmento ${segment.segment.label} identificado pelo termo "${segment.matchedTerm}" ${segment.field === "category" ? "na categoria" : "no nome"}`,
+      kind: segment.field === "name" ? "INFERRED" : "OBSERVED",
+      source: segment.field === "cnae" ? bizSource : c.hasGoogleSource ? "GOOGLE_MAPS_SCRAPER" : "SYSTEM",
+      sourceUrl: segment.field === "cnae" ? null : c.sourceUrl,
+      observedAt: segment.field === "cnae" ? b!.fetchedAt : googleAt,
     });
+  }
+
+  // ── Dados empresariais (cadastro oficial e estimativas do fornecedor) ──
+  if (b) {
+    const biz = (key: string, label: string, kind: EvidenceKind) => add({ key, label, kind, source: bizSource, sourceUrl: null, observedAt: b.fetchedAt });
+    if (b.registrationStatus) biz("biz.registry", `CNPJ ${formatCnpj(b.cnpj) ?? b.cnpj} com situação ${b.registrationStatus} na Receita`, "OBSERVED");
+    if (b.primaryCnae && (b.primaryCnae.code || b.primaryCnae.description)) biz("biz.cnae", `Atividade principal (CNAE ${b.primaryCnae.code ?? "sem código"}): ${b.primaryCnae.description ?? "sem descrição"}`, "OBSERVED");
+    if (b.openedAt) {
+      const years = Math.floor((Date.parse(b.fetchedAt) - Date.parse(b.openedAt)) / (365.25 * 86_400_000));
+      biz("biz.age", `Aberta em ${b.openedAt.split("-").reverse().join("/")}${years >= 0 ? ` (${years} ${years === 1 ? "ano" : "anos"} de atividade)` : ""}`, "OBSERVED");
+    }
+    if (b.size) biz("biz.size", `Porte ${SIZE_LABEL[b.size] ?? b.size.toLowerCase()} (classificação do fornecedor, estimada)`, "INFERRED");
+    if (b.employees) biz("biz.employees", `Funcionários: ${rangeText(b.employees)} (${natureText(b.employees.nature)})`, b.employees.nature === "ESTIMATED" ? "INFERRED" : "OBSERVED");
+    if (b.revenue) biz("biz.revenue", `Faturamento anual: ${rangeText(b.revenue, true)} (${natureText(b.revenue.nature)})`, b.revenue.nature === "ESTIMATED" ? "INFERRED" : "OBSERVED");
+    const ft = b.foreignTrade;
+    if (ft && (ft.exportYears.length || ft.importYears.length)) {
+      const parts = [ft.exportYears.length && `exportação em ${ft.exportYears.join(", ")}`, ft.importYears.length && `importação em ${ft.importYears.join(", ")}`].filter(Boolean);
+      biz("biz.comex", `Registros de comércio exterior: ${parts.join("; ")} (indicador de anos, sem volume)`, "OBSERVED");
+    }
+    if (b.units != null && b.units > 1) biz("biz.units", `${b.units} unidades no grupo (matriz e filiais)`, "OBSERVED");
   }
 
   // ── Telefones e WhatsApp ──
@@ -206,6 +270,8 @@ export function collectFacts(c: CompanySnapshot): CompanyFacts {
   const missing = [!c.category && "categoria", !c.city && "cidade", !phones.phones.length && !emails.length && "contato válido"].filter(Boolean);
   if (missing.length) issues.push({ code: "record.incomplete", severity: "WARN", message: `Cadastro incompleto: falta ${missing.join(", ")}.` });
   for (const d of c.duplicateCandidates) issues.push({ code: "record.duplicate", severity: "WARN", message: `Possível duplicidade com "${d.name}" (${d.reason}).` });
+  if (b?.registrationStatus && b.registrationStatus !== "ATIVA") issues.push({ code: "business.inactive", severity: "WARN", message: `O CNPJ está com situação ${b.registrationStatus} na Receita: confirme se a empresa ainda opera antes de abordar.` });
+  if (b?.simulated) issues.push({ code: "business.simulated", severity: "INFO", message: "Dados empresariais SIMULADOS (modo de teste): não representam a empresa real." });
   const dates = [c.lastVerifiedAt, c.lastEnrichedAt, c.collectedAt].filter((d): d is Date => !!d).map((d) => d.getTime());
   const lastVerification = dates.length ? new Date(Math.max(...dates)).toISOString() : null;
 

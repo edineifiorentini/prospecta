@@ -7,7 +7,9 @@ Esta parte do Prospecta vai além da coleta de empresas. Ela qualifica cada empr
   - aba **Inteligência comercial** na ficha da empresa;
   - **Configurações › Inteligência artificial**.
 
-## 1. Os três indicadores (metodologia `2026.10-ic1`)
+## 1. Os três indicadores (metodologia `2026.11-ic2`)
+
+> A `2026.11-ic2` acrescenta três critérios que só existem para empresas com dados empresariais (porte e equipe, escala da operação e cadastro oficial ativo) e o CNAE oficial na identificação do segmento. Sem esses dados, a nota é a mesma da `2026.10-ic1`. Detalhes em [DADOS-EMPRESARIAIS.md](DADOS-EMPRESARIAIS.md).
 
 Cada indicador vai de 0 a 100 e é calculado separadamente. A conta é a mesma da auditoria digital:
 
@@ -137,7 +139,7 @@ Cada conta (empresa cliente) cadastra as chaves dos provedores que quiser em Con
 
 ## 4. Análise Comercial com IA
 
-Contrato validado no servidor (`analysis/schema.ts`, versão de prompt `ic-2026.10.2`), igual para todos os provedores:
+Contrato validado no servidor (`analysis/schema.ts`, versão de prompt `ic-2026.11.1`), igual para todos os provedores:
 
 - `summary`: resumo comercial;
 - `verifiedFacts`: fatos com as evidências citadas (E1, E2…);

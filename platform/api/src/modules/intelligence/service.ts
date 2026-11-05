@@ -1,8 +1,31 @@
 import { prisma } from "../../lib/prisma.ts";
 import { notFound } from "../../lib/errors.ts";
 import { readOrgSettings } from "../orgs/settings.ts";
-import { collectFacts, type CompanySnapshot } from "./evidence.ts";
+import { simulationActive } from "../company-data/service.ts";
+import type { BusinessProfile, DataPoint, Range } from "../company-data/types.ts";
+import { collectFacts, type BusinessRange, type BusinessSnapshot, type CompanySnapshot } from "./evidence.ts";
 import { scoreCompany, type IntelligenceConfig } from "./scoring.ts";
+
+const asRange = (d: DataPoint<Range> | undefined): BusinessRange | null => (d ? { ...d.value, nature: d.nature } : null);
+
+/** Do perfil normalizado, só o que os indicadores e a IA usam (nada de contatos ou dados pessoais). */
+export function businessSnapshot(p: BusinessProfile): BusinessSnapshot {
+  const units = p.branches?.value.length ?? null;
+  return {
+    provider: p.provider,
+    simulated: p.simulated,
+    fetchedAt: p.fetchedAt,
+    cnpj: p.cnpj,
+    registrationStatus: p.registrationStatus?.value ?? null,
+    openedAt: p.openedAt?.value ?? null,
+    primaryCnae: p.primaryCnae?.value ?? null,
+    size: p.size?.value ?? null,
+    employees: asRange(p.employees),
+    revenue: asRange(p.revenue),
+    foreignTrade: p.foreignTrade?.value ?? null,
+    units: units && units > 0 ? units : null,
+  };
+}
 
 /** Carrega do banco o instantâneo usado pela inteligência comercial (sempre filtrado pela organização). */
 export async function loadSnapshot(organizationId: string, companyId: string): Promise<CompanySnapshot> {
@@ -16,7 +39,7 @@ export async function loadSnapshot(organizationId: string, companyId: string): P
     },
   });
   if (!c) throw notFound("Empresa não encontrada.");
-  const [fieldSources, audit, duplicates] = await Promise.all([
+  const [fieldSources, audit, duplicates, dataProfile] = await Promise.all([
     prisma.companyFieldSource.findMany({ where: { companyId: c.id, organizationId }, orderBy: { observedAt: "desc" }, take: 400, select: { field: true, value: true, source: true, status: true, observedAt: true } }),
     prisma.digitalAudit.findFirst({ where: { companyId: c.id, organizationId, status: "COMPLETED" }, orderBy: { createdAt: "desc" }, select: { finishedAt: true, createdAt: true, evidence: { select: { criterion: true, result: true } } } }),
     prisma.company.findMany({
@@ -29,6 +52,8 @@ export async function loadSnapshot(organizationId: string, companyId: string): P
       select: { id: true, name: true, normPhone: true, normDomain: true },
       take: 5,
     }),
+    // só perfil confirmado (MATCHED) e do modo atual: dado simulado nunca entra com o real
+    prisma.companyDataProfile.findFirst({ where: { organizationId, companyId: c.id, status: "MATCHED", provider: simulationActive() ? "econodata-mock" : "econodata" }, select: { profile: true } }),
   ]);
   return {
     id: c.id,
@@ -60,6 +85,7 @@ export async function loadSnapshot(organizationId: string, companyId: string): P
       name: d.name,
       reason: c.normPhone && d.normPhone === c.normPhone ? "mesmo telefone" : c.normDomain && d.normDomain === c.normDomain ? "mesmo domínio" : "mesmo nome na mesma cidade",
     })),
+    business: dataProfile?.profile ? businessSnapshot(dataProfile.profile as unknown as BusinessProfile) : null,
   };
 }
 

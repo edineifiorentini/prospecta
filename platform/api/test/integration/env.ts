@@ -29,5 +29,8 @@ export function integrationEnv(): Record<string, string> {
     ADMIN_BOOTSTRAP_TOKEN: "integration-bootstrap-token-0123456789",
     SMTP_URL: "smtp://127.0.0.1:1025",
     CRAWLER_ALLOW_HOSTS: "",
+    // dados empresariais: só a Econodata simulada (sem rede e sem chave real) nos testes
+    ECONODATA_MOCK_MODE: "true",
+    ECONODATA_BASE_URL: "https://api.econodata.com.br",
   };
 }

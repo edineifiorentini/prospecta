@@ -49,7 +49,7 @@ export class AiError extends Error {
 /** Remove qualquer coisa com cara de chave de API antes de registrar ou mostrar uma mensagem. */
 export function redactSecrets(text: string): string {
   return text
-    .replace(/\b(sk-ant-[A-Za-z0-9_-]{6,}|sk-[A-Za-z0-9_-]{8,}|xai-[A-Za-z0-9_-]{8,}|gsk_[A-Za-z0-9]{8,}|AIza[0-9A-Za-z_-]{20,})/g, "[chave omitida]")
+    .replace(/\b(sk-ant-[A-Za-z0-9_-]{6,}|sk-[A-Za-z0-9_-]{8,}|xai-[A-Za-z0-9_-]{8,}|gsk_[A-Za-z0-9]{8,}|ek_[a-z]+_[A-Za-z0-9_-]{6,}|AIza[0-9A-Za-z_-]{20,})/g, "[chave omitida]")
     .replace(/(authorization|x-api-key|x-goog-api-key)\s*[:=]\s*\S+/gi, "$1: [omitido]")
     .slice(0, 300);
 }

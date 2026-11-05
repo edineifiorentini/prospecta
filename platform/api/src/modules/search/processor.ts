@@ -8,6 +8,7 @@ import { mapCsvRow, type ColumnMapping } from "../imports/csv-import.ts";
 import { CancelledError, matchesFilters, searchFiltersSchema, searchParamsSchema, type DiscoveredCompany, type ProgressUpdate } from "../sources/types.ts";
 import { getAdapter } from "./registry.ts";
 import { recomputeDataQuality } from "../audit/service.ts";
+import { autoEnrichAfterSearch } from "../company-data/service.ts";
 
 export const csvRowsKey = (searchJobId: string) => `pp:csvjob:${searchJobId}`;
 
@@ -124,6 +125,8 @@ export async function processSearchJob(job: Job<SearchJobData>) {
       },
     });
     log.info({ total, imported, duplicates, filteredOut }, "busca concluída");
+    // dados empresariais pagos: só se a conta ligou o automático (desligado por padrão)
+    if (sj.provider !== "CSV_IMPORT") await autoEnrichAfterSearch(sj.organizationId, id).catch((err) => log.warn({ err: (err as Error).message }, "enriquecimento automático não enfileirado"));
   } catch (err) {
     const cancelled = err instanceof CancelledError;
     const message = cancelled ? "Cancelada pelo usuário." : (err as Error).message?.slice(0, 500) || "Erro desconhecido";

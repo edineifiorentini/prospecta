@@ -12,6 +12,7 @@ export const SOURCE_CONFIDENCE: Record<SourceType, number> = {
   MANUAL: 0.9,
   WEBSITE: 0.75,
   BRASILAPI_CNPJ: 0.9,
+  ECONODATA: 0.9,
   SYSTEM: 0.5,
 };
 

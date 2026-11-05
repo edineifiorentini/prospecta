@@ -10,6 +10,7 @@ Ela fica no diretório `platform/` deste fork do **Google Maps Scraper Kit**. O 
 - Prompt pronto para outra pessoa instalar com um assistente de código: [docs/PROMPT-INSTALACAO.md](docs/PROMPT-INSTALACAO.md)
 - Metodologia das pontuações: [docs/METODOLOGIA-PONTUACAO.md](docs/METODOLOGIA-PONTUACAO.md)
 - Inteligência comercial e Análise Comercial com IA: [docs/INTELIGENCIA-COMERCIAL.md](docs/INTELIGENCIA-COMERCIAL.md)
+- Dados empresariais pagos (Econodata API v4): [docs/DADOS-EMPRESARIAIS.md](docs/DADOS-EMPRESARIAIS.md)
 - Relatório das fases: [docs/fases/](docs/fases/)
 
 ## Requisitos

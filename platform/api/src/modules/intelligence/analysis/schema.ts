@@ -3,7 +3,8 @@ import { AiError } from "../../ai/errors.ts";
 
 /** Versão do prompt e do contrato. Mudou o prompt? Suba a versão: o cache por hash deixa de valer. */
 // 10.2: proíbe prometer condições do produto que não estejam na descrição da conta
-export const PROMPT_VERSION = "ic-2026.10.2";
+// 11.1: dados empresariais estruturados (faixas estimadas, nunca valores exatos)
+export const PROMPT_VERSION = "ic-2026.11.1";
 
 export const NEXT_ACTIONS = ["VERIFY_DECISION_MAKER", "QUALIFY_OPERATION", "REQUEST_CONVERSATION", "PRESENT_DEMO", "AWAIT_REPLY", "CLOSE_CONTACT"] as const;
 export const CONFIDENCE_LEVELS = ["baixa", "media", "alta"] as const;

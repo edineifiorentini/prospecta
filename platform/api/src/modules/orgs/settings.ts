@@ -43,6 +43,48 @@ export const aiSettingsSchema = z
 
 export type AiSettings = z.infer<typeof aiSettingsSchema>;
 
+/** Blocos de dados da Econodata (campo `incluir`): cada um tem custo próprio em tokens. */
+export const DATA_BUCKETS = ["cadastro", "estrategico", "perfilNegocio", "contatosBasicos", "contatosAvancados"] as const;
+
+export const defaultDataEnrichmentSettings = {
+  enabled: false,
+  /** enriquecer sozinho depois das buscas: desligado (consumo pago); quando ligado, só empresas com CNPJ ou site */
+  autoEnrich: false,
+  autoEnrichMaxPerSearch: 10,
+  /** contatos e decisores (dados pessoais) ficam fora do padrão */
+  buckets: ["cadastro", "estrategico", "perfilNegocio"] as (typeof DATA_BUCKETS)[number][],
+  minMatchConfidence: 0.85,
+  maxTokensPerCall: 2000,
+  maxDailyRequests: 50,
+  maxDailyTokens: 20000,
+  cacheDays: 30,
+  maxBatchSize: 25,
+};
+
+export const dataEnrichmentSettingsSchema = z.object({
+  enabled: z.boolean(),
+  autoEnrich: z.boolean(),
+  autoEnrichMaxPerSearch: z.number().int().min(1).max(100),
+  buckets: z
+    .array(z.enum(DATA_BUCKETS))
+    .min(1)
+    .max(DATA_BUCKETS.length)
+    .refine((b) => b.includes("cadastro"), "O bloco cadastro é obrigatório: é ele que identifica e valida a empresa."),
+  /** confiança mínima para vincular sozinho um CNPJ encontrado por site/telefone/e-mail */
+  minMatchConfidence: z.number().min(0.5).max(1),
+  /** acima disso (estimativa do próprio fornecedor), a consulta não é feita */
+  maxTokensPerCall: z.number().int().min(1).max(1_000_000),
+  maxDailyRequests: z.number().int().min(1).max(10_000),
+  maxDailyTokens: z.number().int().min(1).max(100_000_000),
+  /** dias em que o perfil já consultado é reaproveitado sem nova chamada */
+  cacheDays: z.number().int().min(0).max(365),
+  maxBatchSize: z.number().int().min(1).max(100),
+});
+
+export type DataEnrichmentSettings = z.infer<typeof dataEnrichmentSettingsSchema>;
+
+export const COMPANY_SIZES = ["INDIVIDUAL", "MICRO", "PEQUENO", "MEDIO", "GRANDE"] as const;
+
 /** Configurações da organização (JSON validado). Pesos de pontuação são editáveis. */
 export const orgSettingsSchema = z.object({
   messaging: z
@@ -84,10 +126,25 @@ export const orgSettingsSchema = z.object({
       thresholds: z
         .object({ a: z.number().min(1).max(100), b: z.number().min(1).max(100), minReliability: z.number().min(0).max(100), minCoverage: z.number().min(0.1).max(1) })
         .default({ a: 70, b: 50, minReliability: 40, minCoverage: 0.5 }),
+      /** perfil de cliente ideal pelos dados empresariais (só pesa quando a empresa foi enriquecida) */
+      targetSizes: z.array(z.enum(COMPANY_SIZES)).default(["MICRO", "PEQUENO", "MEDIO"]),
+      idealEmployees: z
+        .object({ min: z.number().int().min(0).max(1_000_000), max: z.number().int().min(1).max(1_000_000) })
+        .refine((r) => r.max >= r.min, "O máximo de funcionários precisa ser maior ou igual ao mínimo.")
+        .default({ min: 2, max: 500 }),
     })
-    .default({ targetSegments: ["imobiliaria", "contabilidade", "advocacia", "agencia_marketing"], criteriaWeights: {}, indicatorWeights: { FIT: 45, OPPORTUNITY: 35, RELIABILITY: 20 }, thresholds: { a: 70, b: 50, minReliability: 40, minCoverage: 0.5 } }),
+    .default({
+      targetSegments: ["imobiliaria", "contabilidade", "advocacia", "agencia_marketing"],
+      criteriaWeights: {},
+      indicatorWeights: { FIT: 45, OPPORTUNITY: 35, RELIABILITY: 20 },
+      thresholds: { a: 70, b: 50, minReliability: 40, minCoverage: 0.5 },
+      targetSizes: ["MICRO", "PEQUENO", "MEDIO"],
+      idealEmployees: { min: 2, max: 500 },
+    }),
   /** IA: desligada até um administrador ativar; as chaves ficam só no servidor */
   ai: aiSettingsSchema.default(defaultAiSettings),
+  /** dados empresariais pagos (Econodata): desligado até um administrador ativar */
+  dataEnrichment: dataEnrichmentSettingsSchema.default(defaultDataEnrichmentSettings),
 });
 
 export type OrgSettings = z.infer<typeof orgSettingsSchema>;

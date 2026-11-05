@@ -23,17 +23,17 @@ enum Role {
 }
 
 model Organization {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  slug      String   @unique
+  id               String   @id @default(uuid()) @db.Uuid
+  name             String
+  slug             String   @unique
   /// Pesos de pontuação, limites de mensagens, retenção etc. (validado pela API)
-  settings  Json     @default("{}")
+  settings         Json     @default("{}")
   /// Limites de pesquisa definidos só pelo administrador da plataforma (null = sem limite).
   /// Pesquisas por dia (horário de Brasília) e total de empresas trazidas por pesquisas; CSV não conta.
-  searchDailyLimit Int? @map("search_daily_limit")
-  companyQuota     Int? @map("company_quota")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  searchDailyLimit Int?     @map("search_daily_limit")
+  companyQuota     Int?     @map("company_quota")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   memberships       Membership[]
   sessions          Session[]
@@ -61,43 +61,45 @@ model Organization {
   fieldSources      CompanyFieldSource[]
   aiAnalyses        AiAnalysis[]
   aiCredentials     AiCredential[]
+  dataProfiles      CompanyDataProfile[]
+  dataProviderCalls DataProviderCall[]
 
   @@map("organizations")
 }
 
 model User {
-  id               String    @id @default(uuid()) @db.Uuid
-  email            String    @unique
-  name             String
-  passwordHash     String    @map("password_hash")
-  isActive         Boolean   @default(true) @map("is_active")
-  failedLoginCount Int       @default(0) @map("failed_login_count")
-  lockedUntil      DateTime? @map("locked_until")
-  lastLoginAt      DateTime? @map("last_login_at")
-  passwordChangedAt DateTime @default(now()) @map("password_changed_at")
+  id                 String    @id @default(uuid()) @db.Uuid
+  email              String    @unique
+  name               String
+  passwordHash       String    @map("password_hash")
+  isActive           Boolean   @default(true) @map("is_active")
+  failedLoginCount   Int       @default(0) @map("failed_login_count")
+  lockedUntil        DateTime? @map("locked_until")
+  lastLoginAt        DateTime? @map("last_login_at")
+  passwordChangedAt  DateTime  @default(now()) @map("password_changed_at")
   /// Senha temporária: o usuário precisa trocá-la antes de usar o sistema
-  mustChangePassword Boolean @default(false) @map("must_change_password")
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
   /// Administrador da plataforma: cria contas (empresas separadas) para clientes. Não enxerga os dados delas.
-  isPlatformAdmin  Boolean   @default(false) @map("is_platform_admin")
+  isPlatformAdmin    Boolean   @default(false) @map("is_platform_admin")
   /// preferências do usuário (ex.: andamento do guia de primeiros passos)
-  preferences      Json      @default("{}")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  preferences        Json      @default("{}")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
-  memberships     Membership[]
-  sessions        Session[]
-  resetTokens     PasswordResetToken[]
-  ownedCompanies  Company[]            @relation("CompanyOwner")
-  ownedDeals      Deal[]               @relation("DealOwner")
-  assignedTasks   Task[]               @relation("TaskAssignee")
-  createdTasks    Task[]               @relation("TaskCreator")
-  activities      Activity[]
-  notes           Note[]
-  searchJobs      SearchJob[]
-  sentMessages    Message[]            @relation("MessageSender")
-  approvedMessages Message[]           @relation("MessageApprover")
+  memberships      Membership[]
+  sessions         Session[]
+  resetTokens      PasswordResetToken[]
+  ownedCompanies   Company[]            @relation("CompanyOwner")
+  ownedDeals       Deal[]               @relation("DealOwner")
+  assignedTasks    Task[]               @relation("TaskAssignee")
+  createdTasks     Task[]               @relation("TaskCreator")
+  activities       Activity[]
+  notes            Note[]
+  searchJobs       SearchJob[]
+  sentMessages     Message[]            @relation("MessageSender")
+  approvedMessages Message[]            @relation("MessageApprover")
   consentsRecorded ContactConsent[]
-  auditLogs       AuditLog[]
+  auditLogs        AuditLog[]
 
   @@map("users")
 }
@@ -184,6 +186,7 @@ enum SourceType {
   MANUAL
   WEBSITE
   BRASILAPI_CNPJ
+  ECONODATA
   SYSTEM
 }
 
@@ -235,8 +238,8 @@ model Company {
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
-  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  owner          User?                @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner          User?                 @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   contacts       Contact[]
   websites       CompanyWebsite[]
   socialProfiles SocialProfile[]
@@ -255,6 +258,7 @@ model Company {
   conversations  Conversation[]
   consents       ContactConsent[]
   aiAnalyses     AiAnalysis[]
+  dataProfiles   CompanyDataProfile[]
 
   @@index([organizationId, status])
   @@index([organizationId, normName])
@@ -295,24 +299,24 @@ enum ContactType {
 }
 
 model Contact {
-  id                 String       @id @default(uuid()) @db.Uuid
-  organizationId     String       @map("organization_id") @db.Uuid
-  companyId          String       @map("company_id") @db.Uuid
-  type               ContactType
-  value              String
-  normalizedValue    String       @map("normalized_value")
-  label              String?
-  isPrimary          Boolean      @default(false) @map("is_primary")
-  source             SourceType
-  sourceUrl          String?      @map("source_url")
-  status             DataStatus   @default(FOUND)
-  confidence         Float        @default(0.5)
+  id              String       @id @default(uuid()) @db.Uuid
+  organizationId  String       @map("organization_id") @db.Uuid
+  companyId       String       @map("company_id") @db.Uuid
+  type            ContactType
+  value           String
+  normalizedValue String       @map("normalized_value")
+  label           String?
+  isPrimary       Boolean      @default(false) @map("is_primary")
+  source          SourceType
+  sourceUrl       String?      @map("source_url")
+  status          DataStatus   @default(FOUND)
+  confidence      Float        @default(0.5)
   /// detalhes da verificação (formato, MX, E.164…) — nunca garante entrega
-  verification       Json?
-  collectedAt        DateTime     @default(now()) @map("collected_at")
-  lastVerifiedAt     DateTime?    @map("last_verified_at")
-  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  company            Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  verification    Json?
+  collectedAt     DateTime     @default(now()) @map("collected_at")
+  lastVerifiedAt  DateTime?    @map("last_verified_at")
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company         Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, type, normalizedValue])
   @@index([organizationId, type, normalizedValue])
@@ -320,22 +324,22 @@ model Contact {
 }
 
 model CompanyWebsite {
-  id             String    @id @default(uuid()) @db.Uuid
-  companyId      String    @map("company_id") @db.Uuid
-  url            String
-  finalUrl       String?   @map("final_url")
-  domain         String
-  isReachable    Boolean?  @map("is_reachable")
-  httpStatus     Int?      @map("http_status")
-  https          Boolean?
-  responseTimeMs Int?      @map("response_time_ms")
-  robotsAllowed  Boolean?  @map("robots_allowed")
-  title          String?
-  metaDescription String?  @map("meta_description")
-  signals        Json?
-  lastCheckedAt  DateTime? @map("last_checked_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id              String    @id @default(uuid()) @db.Uuid
+  companyId       String    @map("company_id") @db.Uuid
+  url             String
+  finalUrl        String?   @map("final_url")
+  domain          String
+  isReachable     Boolean?  @map("is_reachable")
+  httpStatus      Int?      @map("http_status")
+  https           Boolean?
+  responseTimeMs  Int?      @map("response_time_ms")
+  robotsAllowed   Boolean?  @map("robots_allowed")
+  title           String?
+  metaDescription String?   @map("meta_description")
+  signals         Json?
+  lastCheckedAt   DateTime? @map("last_checked_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, domain])
   @@map("company_websites")
@@ -457,31 +461,31 @@ enum JobStatus {
 }
 
 model SearchJob {
-  id             String         @id @default(uuid()) @db.Uuid
-  organizationId String         @map("organization_id") @db.Uuid
-  createdById    String?        @map("created_by_id") @db.Uuid
-  provider       SourceType
-  name           String
-  status         JobStatus      @default(QUEUED)
+  id              String         @id @default(uuid()) @db.Uuid
+  organizationId  String         @map("organization_id") @db.Uuid
+  createdById     String?        @map("created_by_id") @db.Uuid
+  provider        SourceType
+  name            String
+  status          JobStatus      @default(QUEUED)
   /// parâmetros validados da busca (palavra-chave, local, raio, limite, filtros)
-  params         Json
+  params          Json
   /// fase atual, contadores reais e mensagens de andamento
-  progress       Json           @default("{}")
-  providerJobId  String?        @map("provider_job_id")
-  error          String?
-  attempts       Int            @default(0)
-  resultCount    Int            @default(0) @map("result_count")
-  newCount       Int            @default(0) @map("new_count")
-  duplicateCount Int            @default(0) @map("duplicate_count")
-  cancelRequested Boolean       @default(false) @map("cancel_requested")
-  startedAt      DateTime?      @map("started_at")
-  finishedAt     DateTime?      @map("finished_at")
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy      User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  results        SearchResult[]
-  leadSources    LeadSource[]
+  progress        Json           @default("{}")
+  providerJobId   String?        @map("provider_job_id")
+  error           String?
+  attempts        Int            @default(0)
+  resultCount     Int            @default(0) @map("result_count")
+  newCount        Int            @default(0) @map("new_count")
+  duplicateCount  Int            @default(0) @map("duplicate_count")
+  cancelRequested Boolean        @default(false) @map("cancel_requested")
+  startedAt       DateTime?      @map("started_at")
+  finishedAt      DateTime?      @map("finished_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy       User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  results         SearchResult[]
+  leadSources     LeadSource[]
 
   @@index([organizationId, createdAt])
   @@index([status])
@@ -678,6 +682,65 @@ model AiCredential {
 
   @@unique([organizationId, provider])
   @@map("ai_credentials")
+}
+
+/// Dados empresariais de um provedor externo (ex.: Econodata), já normalizados e com procedência.
+/// Um registro por conta, empresa e provedor; dados simulados ("econodata-mock") nunca se misturam com reais.
+model CompanyDataProfile {
+  id              String       @id @default(uuid()) @db.Uuid
+  organizationId  String       @map("organization_id") @db.Uuid
+  companyId       String       @map("company_id") @db.Uuid
+  provider        String
+  /// MATCHED (identificada e enriquecida) | CANDIDATES (ambígua: precisa confirmação) | NOT_FOUND | FAILED
+  status          String
+  cnpj            String?
+  matchConfidence Float?       @map("match_confidence")
+  /// critérios em que o fornecedor casou a empresa (cnpj, site, telefone, nome…)
+  matchedBy       String[]     @default([]) @map("matched_by")
+  /// cnpj_known (CNPJ já validado) | match (identificação automática segura) | manual_choice (confirmada por uma pessoa)
+  identifiedBy    String?      @map("identified_by")
+  /// perfil normalizado (BusinessProfile, modules/company-data/types.ts), independente do fornecedor
+  profile         Json?
+  /// candidatos de uma identificação ambígua: só identificação, sem dados pagos
+  candidates      Json         @default("[]")
+  warnings        String[]     @default([])
+  buckets         String[]     @default([])
+  tokensCharged   Int          @default(0) @map("tokens_charged")
+  errorCode       String?      @map("error_code")
+  error           String?
+  fetchedAt       DateTime?    @map("fetched_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company         Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, companyId, provider])
+  @@index([organizationId, cnpj])
+  @@map("company_data_profiles")
+}
+
+/// Registro de cada chamada a um provedor de dados: consumo, falhas e limites. Sem chave nem dados pessoais.
+model DataProviderCall {
+  id              String       @id @default(uuid()) @db.Uuid
+  organizationId  String       @map("organization_id") @db.Uuid
+  companyId       String?      @map("company_id") @db.Uuid
+  requestedById   String?      @map("requested_by_id") @db.Uuid
+  provider        String
+  /// match | lookup | balance
+  operation       String
+  /// prévia de custo (X-Estimate-Only): não consome tokens
+  estimateOnly    Boolean      @default(false) @map("estimate_only")
+  httpStatus      Int?         @map("http_status")
+  ok              Boolean
+  tokensCharged   Int          @default(0) @map("tokens_charged")
+  tokensEstimated Int?         @map("tokens_estimated")
+  durationMs      Int?         @map("duration_ms")
+  errorCode       String?      @map("error_code")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@map("data_provider_calls")
 }
 
 // ───────────────────────────── CRM ─────────────────────────────
@@ -877,25 +940,25 @@ enum MessagingAccountStatus {
 }
 
 model MessagingAccount {
-  id                String                 @id @default(uuid()) @db.Uuid
-  organizationId    String                 @map("organization_id") @db.Uuid
-  provider          MessagingProvider
-  name              String
-  externalUserId    String?                @map("external_user_id")
+  id               String                 @id @default(uuid()) @db.Uuid
+  organizationId   String                 @map("organization_id") @db.Uuid
+  provider         MessagingProvider
+  name             String
+  externalUserId   String?                @map("external_user_id")
   /// token do provedor cifrado com AES-256-GCM (APP_ENCRYPTION_KEY)
-  tokenEncrypted    String?                @map("token_encrypted")
+  tokenEncrypted   String?                @map("token_encrypted")
   /// chave HMAC dos webhooks cifrada
-  hmacKeyEncrypted  String?                @map("hmac_key_encrypted")
-  status            MessagingAccountStatus @default(DISCONNECTED)
-  phoneJid          String?                @map("phone_jid")
-  settings          Json                   @default("{}")
-  lastError         String?                @map("last_error")
-  lastStatusAt      DateTime?              @map("last_status_at")
-  createdAt         DateTime               @default(now()) @map("created_at")
-  updatedAt         DateTime               @updatedAt @map("updated_at")
-  organization      Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  conversations     Conversation[]
-  webhookEvents     WebhookEvent[]
+  hmacKeyEncrypted String?                @map("hmac_key_encrypted")
+  status           MessagingAccountStatus @default(DISCONNECTED)
+  phoneJid         String?                @map("phone_jid")
+  settings         Json                   @default("{}")
+  lastError        String?                @map("last_error")
+  lastStatusAt     DateTime?              @map("last_status_at")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+  organization     Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversations    Conversation[]
+  webhookEvents    WebhookEvent[]
 
   @@index([organizationId])
   @@map("messaging_accounts")

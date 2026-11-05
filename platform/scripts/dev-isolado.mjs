@@ -26,6 +26,8 @@ const env = Object.fromEntries(
 );
 // só este computador: nada do ambiente de teste fica visível na rede local
 env.HOST = "127.0.0.1";
+// dados empresariais: Econodata simulada (sem chave, sem rede e sem cobrança) no ambiente isolado
+env.ECONODATA_MOCK_MODE = "true";
 
 const which = process.argv[2];
 if (which === "api") {

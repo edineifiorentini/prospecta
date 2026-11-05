@@ -7,6 +7,8 @@ import { processEnrichmentJob } from "../modules/enrichment/service.ts";
 import { processAuditJob } from "../modules/audit/service.ts";
 import { processSendMessage, refreshMessagingStatus } from "../modules/messaging/sender.ts";
 import { applyRetention, backfillDataQuality, reconcileStaleJobs, sendTaskReminders } from "../modules/maintenance/tasks.ts";
+import { processCompanyDataJob } from "../modules/company-data/service.ts";
+import { env } from "../config/env.ts";
 import type { MaintenanceJobData } from "../queues/index.ts";
 
 /** Registra os processadores de cada fila. Módulos são adicionados a cada fase. */
@@ -24,6 +26,9 @@ export async function startWorkers(): Promise<Worker[]> {
 
   // envio de WhatsApp: um por vez e no máximo 20 por minuto (além dos limites por organização)
   workers.push(new Worker(QUEUES.messaging, processSendMessage, { connection: bullConnection(), concurrency: 1, limiter: { max: 20, duration: 60_000 } }));
+
+  // dados empresariais pagos (Econodata): poucas ao mesmo tempo e abaixo do limite do fornecedor (60/min por chave)
+  workers.push(new Worker(QUEUES.companyData, processCompanyDataJob, { connection: bullConnection(), concurrency: env.ECONODATA_MAX_CONCURRENT_REQUESTS, limiter: { max: 20, duration: 60_000 }, lockDuration: 180_000 }));
 
   const maintenance = new Worker(
     QUEUES.maintenance,

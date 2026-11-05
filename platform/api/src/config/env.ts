@@ -44,6 +44,12 @@ const schema = z.object({
   /// destinos internos adicionais que o crawler pode acessar (somente testes locais)
   CRAWLER_ALLOW_HOSTS: z.string().optional().default(""),
   // Chaves de IA não ficam aqui: cada conta cadastra as próprias, cifradas no banco (modules/ai/credentials.ts).
+  // Dados empresariais (Econodata API v4). A chave também é por conta, cifrada no banco (modules/company-data).
+  ECONODATA_BASE_URL: z.string().url().default("https://api.econodata.com.br"),
+  /** dados SIMULADOS, sem chave e sem rede; ignorado em produção (nunca mistura dado falso com real) */
+  ECONODATA_MOCK_MODE: bool,
+  /** chamadas simultâneas ao fornecedor no processamento em lote (o limite dele é 60/min por chave) */
+  ECONODATA_MAX_CONCURRENT_REQUESTS: z.coerce.number().int().min(1).max(5).default(2),
 });
 
 export type Env = z.infer<typeof schema>;

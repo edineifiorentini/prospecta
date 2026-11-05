@@ -35,7 +35,21 @@ type AiSettings = {
   maxRetries: number;
   cacheDays: number;
 };
-type Intelligence = { targetSegments: string[]; criteriaWeights: Record<string, number>; indicatorWeights: { FIT: number; OPPORTUNITY: number; RELIABILITY: number }; thresholds: { a: number; b: number; minReliability: number; minCoverage: number } };
+type Intelligence = {
+  targetSegments: string[];
+  criteriaWeights: Record<string, number>;
+  indicatorWeights: { FIT: number; OPPORTUNITY: number; RELIABILITY: number };
+  thresholds: { a: number; b: number; minReliability: number; minCoverage: number };
+  targetSizes: string[];
+  idealEmployees: { min: number; max: number };
+};
+const SIZES = [
+  ["INDIVIDUAL", "Individual"],
+  ["MICRO", "Micro"],
+  ["PEQUENO", "Pequeno"],
+  ["MEDIO", "Médio"],
+  ["GRANDE", "Grande"],
+] as const;
 type Price = { input: number; output: number; verifiedAt: string; source: string; validUntil?: string; note?: string };
 type Data = {
   settings: AiSettings;
@@ -263,6 +277,28 @@ export function AiSettingsPanel() {
             <Field label="Confiabilidade mínima" hint="Abaixo disso: “Necessita qualificação”.">
               <Input type="number" min={0} max={100} value={intel.thresholds.minReliability} disabled={!editable} onChange={(e) => setIntel((x) => (x ? { ...x, thresholds: { ...x.thresholds, minReliability: Number(e.target.value) } } : x))} />
             </Field>
+          </div>
+          <div className="md:col-span-2">
+            <Label className="mb-1 block">Porte e equipe (dados empresariais)</Label>
+            <p className="mb-2 text-xs text-muted-foreground">Só pesam nas empresas enriquecidas pela Econodata; nas demais, a nota não muda.</p>
+            <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
+              {SIZES.map(([id, label]) => (
+                <label key={id} className="inline-flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={intel.targetSizes.includes(id)}
+                    disabled={!editable}
+                    onCheckedChange={(v) => setIntel((x) => (x ? { ...x, targetSizes: v ? [...x.targetSizes, id] : x.targetSizes.filter((y) => y !== id) } : x))}
+                  />
+                  {label}
+                </label>
+              ))}
+              <Field label="Funcionários: mínimo">
+                <Input type="number" min={0} className="w-28" value={intel.idealEmployees.min} disabled={!editable} onChange={(e) => setIntel((x) => (x ? { ...x, idealEmployees: { ...x.idealEmployees, min: Number(e.target.value) } } : x))} />
+              </Field>
+              <Field label="Funcionários: máximo">
+                <Input type="number" min={1} className="w-28" value={intel.idealEmployees.max} disabled={!editable} onChange={(e) => setIntel((x) => (x ? { ...x, idealEmployees: { ...x.idealEmployees, max: Number(e.target.value) } } : x))} />
+              </Field>
+            </div>
           </div>
         </div>
       </SectionCard>
