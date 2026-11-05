@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AI_PROVIDERS } from "../ai/types.ts";
+import { PUBLIC_SOURCE_IDS } from "../public-data/sources.ts";
 
 const provider = z.enum(AI_PROVIDERS);
 
@@ -85,6 +86,64 @@ export type DataEnrichmentSettings = z.infer<typeof dataEnrichmentSettingsSchema
 
 export const COMPANY_SIZES = ["INDIVIDUAL", "MICRO", "PEQUENO", "MEDIO", "GRANDE"] as const;
 
+/** Central de integrações: liga/desliga, concorrência, cache e limite diário de cada fonte (padrões em public-data/sources.ts). */
+export const integrationConfigSchema = z.object({
+  enabled: z.boolean(),
+  concurrency: z.number().int().min(1).max(5),
+  /** dias em que um resultado já consultado é reaproveitado sem nova chamada */
+  cacheDays: z.number().int().min(0).max(365),
+  maxDailyRequests: z.number().int().min(1).max(100_000),
+  /** execução agendada (ex.: sincronização diária do radar de contratações) */
+  scheduled: z.boolean(),
+});
+export type IntegrationConfig = z.infer<typeof integrationConfigSchema>;
+
+/** Segmentos do radar de oportunidades públicas: palavras procuradas no objeto da contratação (sem acento). */
+export const DEFAULT_RADAR_SEGMENTS = [
+  { id: "marketing", name: "Marketing e publicidade", enabled: true, keywords: ["publicidade", "propaganda", "marketing", "agencia de comunicacao", "midias sociais", "redes sociais", "assessoria de imprensa"] },
+  { id: "software", name: "Tecnologia e software", enabled: true, keywords: ["software", "licenca de uso", "sistema de gestao", "sistema informatizado", "tecnologia da informacao", "solucao tecnologica", "computacao em nuvem"] },
+  { id: "sites", name: "Desenvolvimento de sites", enabled: true, keywords: ["site", "sitio eletronico", "portal institucional", "portal da transparencia", "pagina na internet", "desenvolvimento web", "hospedagem de site"] },
+  { id: "equipamentos", name: "Equipamentos", enabled: true, keywords: ["equipamentos de informatica", "computadores", "notebooks", "impressoras", "mobiliario", "eletroeletronicos"] },
+  { id: "manutencao", name: "Serviços de manutenção", enabled: true, keywords: ["manutencao preventiva", "manutencao corretiva", "conservacao predial", "assistencia tecnica"] },
+  { id: "servicos", name: "Serviços empresariais", enabled: true, keywords: ["consultoria", "assessoria", "treinamento", "capacitacao", "terceirizacao de servicos"] },
+];
+
+export const radarSettingsSchema = z.object({
+  segments: z
+    .array(
+      z.object({
+        id: z.string().regex(/^[a-z0-9_-]{2,40}$/),
+        name: z.string().trim().min(2).max(60),
+        enabled: z.boolean(),
+        keywords: z.array(z.string().trim().min(2).max(60)).min(1).max(40),
+      }),
+    )
+    .max(20),
+  /** UFs sincronizadas do PNCP (vazio = nenhuma) */
+  ufs: z.array(z.string().regex(/^[A-Z]{2}$/)).max(27),
+  /** municípios (código IBGE de 7 dígitos) para filtrar a consulta; vazio = toda a UF */
+  cityIbgeCodes: z.array(z.string().regex(/^\d{7}$/)).max(50),
+  /** quantos dias para trás a sincronização busca publicações */
+  lookbackDays: z.number().int().min(1).max(60),
+  /** modalidades do PNCP (6 pregão eletrônico, 8 dispensa, 4 concorrência eletrônica, 9 inexigibilidade…) */
+  modalities: z.array(z.number().int().min(1).max(13)).min(1).max(13),
+});
+export type RadarSettings = z.infer<typeof radarSettingsSchema>;
+export const defaultRadarSettings: RadarSettings = { segments: DEFAULT_RADAR_SEGMENTS, ufs: [], cityIbgeCodes: [], lookbackDays: 15, modalities: [6, 8, 4] };
+
+/** Oferta (produto ou serviço) com pesos próprios: a mesma empresa pode ser ótima para uma oferta e fraca para outra. */
+export const offerSchema = z.object({
+  id: z.string().regex(/^[a-z0-9_-]{2,40}$/),
+  name: z.string().trim().min(2).max(60),
+  /** vazio/ausente = usa os segmentos-alvo da conta */
+  targetSegments: z.array(z.string().max(40)).max(30).optional(),
+  targetSizes: z.array(z.enum(COMPANY_SIZES)).optional(),
+  idealEmployees: z.object({ min: z.number().int().min(0).max(1_000_000), max: z.number().int().min(1).max(1_000_000) }).optional(),
+  criteriaWeights: z.record(z.string(), z.number().min(0).max(100)).default({}),
+  indicatorWeights: z.object({ FIT: z.number().min(0).max(100), OPPORTUNITY: z.number().min(0).max(100), RELIABILITY: z.number().min(0).max(100) }).optional(),
+});
+export type Offer = z.infer<typeof offerSchema>;
+
 /** Configurações da organização (JSON validado). Pesos de pontuação são editáveis. */
 export const orgSettingsSchema = z.object({
   messaging: z
@@ -132,6 +191,8 @@ export const orgSettingsSchema = z.object({
         .object({ min: z.number().int().min(0).max(1_000_000), max: z.number().int().min(1).max(1_000_000) })
         .refine((r) => r.max >= r.min, "O máximo de funcionários precisa ser maior ou igual ao mínimo.")
         .default({ min: 2, max: 500 }),
+      /** ofertas com pesos próprios (score por produto ou serviço); a prioridade A/B/C da conta continua a mesma */
+      offers: z.array(offerSchema).max(10).default([]),
     })
     .default({
       targetSegments: ["imobiliaria", "contabilidade", "advocacia", "agencia_marketing"],
@@ -140,11 +201,16 @@ export const orgSettingsSchema = z.object({
       thresholds: { a: 70, b: 50, minReliability: 40, minCoverage: 0.5 },
       targetSizes: ["MICRO", "PEQUENO", "MEDIO"],
       idealEmployees: { min: 2, max: 500 },
+      offers: [],
     }),
   /** IA: desligada até um administrador ativar; as chaves ficam só no servidor */
   ai: aiSettingsSchema.default(defaultAiSettings),
   /** dados empresariais pagos (Econodata): desligado até um administrador ativar */
   dataEnrichment: dataEnrichmentSettingsSchema.default(defaultDataEnrichmentSettings),
+  /** fontes públicas e gratuitas: só o que a conta mudou (o resto vem dos padrões de cada fonte) */
+  integrations: z.partialRecord(z.enum(PUBLIC_SOURCE_IDS), integrationConfigSchema.partial()).default({}),
+  /** radar de oportunidades públicas (PNCP) */
+  radar: radarSettingsSchema.default(defaultRadarSettings),
 });
 
 export type OrgSettings = z.infer<typeof orgSettingsSchema>;

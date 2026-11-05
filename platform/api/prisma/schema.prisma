@@ -63,6 +63,7 @@ model Organization {
   aiCredentials     AiCredential[]
   dataProfiles      CompanyDataProfile[]
   dataProviderCalls DataProviderCall[]
+  publicRecords     CompanyPublicRecord[]
 
   @@map("organizations")
 }
@@ -187,6 +188,7 @@ enum SourceType {
   WEBSITE
   BRASILAPI_CNPJ
   ECONODATA
+  RECEITA_DADOS_ABERTOS
   SYSTEM
 }
 
@@ -259,6 +261,7 @@ model Company {
   consents       ContactConsent[]
   aiAnalyses     AiAnalysis[]
   dataProfiles   CompanyDataProfile[]
+  publicRecords  CompanyPublicRecord[]
 
   @@index([organizationId, status])
   @@index([organizationId, normName])
@@ -556,6 +559,8 @@ model DigitalAudit {
   recommendations    Json            @default("[]")
   services           Json            @default("[]")
   lighthouse         Json?
+  /// diagnóstico técnico complementar (tecnologias, TLS, PageSpeed celular/computador, dados de campo): não entra nas notas
+  diagnostics        Json?
   error              String?
   requestedById      String?         @map("requested_by_id") @db.Uuid
   startedAt          DateTime?       @map("started_at")
@@ -1157,4 +1162,252 @@ model GeocodeCache {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("geocode_cache")
+}
+
+// ───────────────────── Fontes públicas e gratuitas (Central de integrações) ─────────────────────
+
+/// Cache global de respostas de fontes públicas (IBGE, Comex Stat…): estatística agregada, sem dado pessoal.
+model PublicDataCache {
+  id              String   @id @default(uuid()) @db.Uuid
+  source          String
+  /// recurso consultado (ex.: "regional:4128104")
+  key             String
+  payload         Json
+  /// período de referência do dado (ano, mês), quando a fonte informa
+  referencePeriod String?  @map("reference_period")
+  fetchedAt       DateTime @default(now()) @map("fetched_at")
+  expiresAt       DateTime @map("expires_at")
+
+  @@unique([source, key])
+  @@map("public_data_cache")
+}
+
+/// Cada execução de uma integração pública (consulta, sincronização, teste): saúde, falhas e volume. Sem chave nem dado pessoal.
+model IntegrationRun {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  companyId      String?  @map("company_id") @db.Uuid
+  source         String
+  /// company | regional | sync | health | import
+  operation      String
+  ok             Boolean
+  /// executada com a fonte simulada (sem rede)
+  mock           Boolean  @default(false)
+  httpStatus     Int?     @map("http_status")
+  records        Int      @default(0)
+  durationMs     Int?     @map("duration_ms")
+  errorCode      String?  @map("error_code")
+  error          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([source, createdAt])
+  @@index([organizationId, source, createdAt])
+  @@index([companyId, source])
+  @@map("integration_runs")
+}
+
+/// Importação de arquivo público (Receita, CAGED, CVM) com checkpoint: a retomada continua da última linha gravada.
+model PublicImportRun {
+  id            String    @id @default(uuid()) @db.Uuid
+  source        String
+  /// empresas | estabelecimentos | socios | cnaes | naturezas | municipios | motivos | caged_mov | cvm_cadastro | cvm_dfp
+  kind          String
+  /// nome do arquivo (sem a pasta)
+  file          String
+  fileSize      BigInt?   @map("file_size")
+  filters       Json      @default("{}")
+  /// RUNNING | COMPLETED | FAILED | CANCELLED
+  status        String
+  linesRead     Int       @default(0) @map("lines_read")
+  linesImported Int       @default(0) @map("lines_imported")
+  /// última linha de dados gravada com sucesso
+  checkpoint    Int       @default(0)
+  error         String?
+  startedAt     DateTime  @default(now()) @map("started_at")
+  finishedAt    DateTime? @map("finished_at")
+
+  @@index([source, kind, file])
+  @@map("public_import_runs")
+}
+
+/// Contratações publicadas no PNCP (catálogo global). O vínculo com os segmentos de cada conta é feito na leitura.
+model PublicOpportunity {
+  id               String    @id @default(uuid()) @db.Uuid
+  source           String    @default("pncp")
+  /// numeroControlePNCP
+  controlNumber    String    @map("control_number")
+  buyerCnpj        String?   @map("buyer_cnpj")
+  buyerName        String?   @map("buyer_name")
+  unitName         String?   @map("unit_name")
+  uf               String?
+  city             String?
+  cityIbge         String?   @map("city_ibge")
+  modalityId       Int?      @map("modality_id")
+  modality         String?
+  object           String
+  objectFolded     String    @map("object_folded")
+  /// valor total estimado informado pelo órgão (pode ser sigiloso ou ausente)
+  estimatedValue   Float?    @map("estimated_value")
+  status           String?
+  publishedAt      DateTime? @map("published_at")
+  proposalOpensAt  DateTime? @map("proposal_opens_at")
+  proposalClosesAt DateTime? @map("proposal_closes_at")
+  url              String?
+  fetchedAt        DateTime  @default(now()) @map("fetched_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@unique([source, controlNumber])
+  @@index([uf, proposalClosesAt])
+  @@index([cityIbge, publishedAt])
+  @@map("public_opportunities")
+}
+
+/// Registros públicos ligados a uma empresa pelo CNPJ (Portal da Transparência). Informativo: não é juízo de valor.
+model CompanyPublicRecord {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  companyId      String       @map("company_id") @db.Uuid
+  source         String
+  /// CEIS | CNEP | CONTRATO_FEDERAL
+  kind           String
+  externalId     String       @map("external_id")
+  cnpj           String
+  agency         String?
+  recordType     String?      @map("record_type")
+  description    String?
+  status         String?
+  startDate      DateTime?    @map("start_date")
+  endDate        DateTime?    @map("end_date")
+  value          Float?
+  url            String?
+  fetchedAt      DateTime     @default(now()) @map("fetched_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, companyId, source, kind, externalId])
+  @@index([companyId])
+  @@map("company_public_records")
+}
+
+/// Receita Federal: dados abertos do CNPJ (recorte local importado). Empresa = raiz do CNPJ (8 dígitos).
+model RfEmpresa {
+  cnpjBasico       String   @id @map("cnpj_basico") @db.Char(8)
+  razaoSocial      String   @map("razao_social")
+  naturezaJuridica String?  @map("natureza_juridica")
+  capitalSocial    Float?   @map("capital_social")
+  /// 00 não informado | 01 micro empresa | 03 empresa de pequeno porte | 05 demais
+  porte            String?
+  importedAt       DateTime @default(now()) @map("imported_at")
+
+  @@map("rf_empresas")
+}
+
+/// Receita Federal: estabelecimento (matriz ou filial). Sem e-mail completo: só o domínio, para cruzar com o site.
+model RfEstabelecimento {
+  cnpj             String    @id @db.Char(14)
+  cnpjBasico       String    @map("cnpj_basico") @db.Char(8)
+  /// 1 matriz | 2 filial
+  matrizFilial     String?   @map("matriz_filial")
+  nomeFantasia     String?   @map("nome_fantasia")
+  nomeFolded       String?   @map("nome_folded")
+  /// 01 nula | 02 ativa | 03 suspensa | 04 inapta | 08 baixada
+  situacao         String?
+  dataSituacao     DateTime? @map("data_situacao") @db.Date
+  motivoSituacao   String?   @map("motivo_situacao")
+  dataInicio       DateTime? @map("data_inicio") @db.Date
+  cnaePrincipal    String?   @map("cnae_principal")
+  cnaesSecundarios String[]  @default([]) @map("cnaes_secundarios")
+  logradouro       String?
+  numero           String?
+  complemento      String?
+  bairro           String?
+  cep              String?
+  uf               String?
+  /// código de município da Receita (tabela própria, diferente do IBGE)
+  municipioCodigo  String?   @map("municipio_codigo")
+  /// DDD + número, só dígitos
+  telefones        String[]  @default([])
+  emailDominio     String?   @map("email_dominio")
+  importedAt       DateTime  @default(now()) @map("imported_at")
+
+  @@index([cnpjBasico])
+  @@index([uf, municipioCodigo])
+  @@index([cep])
+  @@index([emailDominio])
+  @@index([telefones], type: Gin)
+  @@map("rf_estabelecimentos")
+}
+
+/// Receita Federal: quadro societário resumido. Só a quantidade (nomes e CPF não são importados).
+model RfSociosResumo {
+  cnpjBasico String @id @map("cnpj_basico") @db.Char(8)
+  quantidade Int
+
+  @@map("rf_socios_resumo")
+}
+
+/// Receita Federal: tabelas de código (cnae, natureza, municipio, motivo).
+model RfCodigo {
+  tipo      String
+  codigo    String
+  descricao String
+
+  @@id([tipo, codigo])
+  @@map("rf_codigos")
+}
+
+/// Novo CAGED (MTE) agregado por competência, município e seção CNAE. Nenhum dado de trabalhador é guardado.
+model LaborStat {
+  id          String @id @default(uuid()) @db.Uuid
+  /// arquivo de origem (CAGEDMOV…): permite refazer a importação de um mês sem duplicar
+  sourceFile  String @map("source_file")
+  /// competência AAAAMM
+  period      String @db.Char(6)
+  /// município IBGE com 6 dígitos (sem o verificador), como publicado no CAGED
+  cityCode    String @map("city_code") @db.Char(6)
+  /// seção CNAE 2.0 (A a U)
+  section     String
+  hires       Int    @default(0)
+  separations Int    @default(0)
+  balance     Int    @default(0)
+
+  @@unique([sourceFile, period, cityCode, section])
+  @@index([cityCode, period])
+  @@map("labor_stats")
+}
+
+/// CVM: companhias abertas (cadastro).
+model CvmCompany {
+  cnpj         String    @id @db.Char(14)
+  name         String
+  tradeName    String?   @map("trade_name")
+  status       String?
+  sector       String?
+  cvmCode      String?   @map("cvm_code")
+  registeredAt DateTime? @map("registered_at") @db.Date
+  importedAt   DateTime  @default(now()) @map("imported_at")
+
+  @@map("cvm_companies")
+}
+
+/// CVM: contas principais das demonstrações financeiras padronizadas (DFP), exercício mais recente de cada arquivo.
+model CvmFinancial {
+  id            String   @id @default(uuid()) @db.Uuid
+  cnpj          String   @db.Char(14)
+  year          Int
+  /// BPA | BPP | DRE
+  statement     String
+  consolidated  Boolean
+  accountCode   String   @map("account_code")
+  accountName   String   @map("account_name")
+  /// valor como publicado (multiplicar pela escala)
+  value         Float
+  /// MIL | UNIDADE
+  scale         String
+  referenceDate DateTime @map("reference_date") @db.Date
+  version       Int      @default(1)
+
+  @@unique([cnpj, year, statement, consolidated, accountCode])
+  @@index([cnpj])
+  @@map("cvm_financials")
 }

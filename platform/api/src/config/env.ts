@@ -50,6 +50,12 @@ const schema = z.object({
   ECONODATA_MOCK_MODE: bool,
   /** chamadas simultâneas ao fornecedor no processamento em lote (o limite dele é 60/min por chave) */
   ECONODATA_MAX_CONCURRENT_REQUESTS: z.coerce.number().int().min(1).max(5).default(2),
+  // Fontes públicas e gratuitas (IBGE, PNCP, Portal da Transparência, Comex Stat, PageSpeed). Tokens gratuitos
+  // também são por conta, cifrados no banco; cada integração começa desligada (Configurações › Integrações).
+  /** fontes públicas SIMULADAS, sem rede; ignorado em produção (dado simulado nunca se mistura com o real) */
+  PUBLIC_DATA_MOCK_MODE: bool,
+  /** pasta de onde a importação de arquivos públicos (Receita, CAGED, CVM) lê os arquivos já baixados */
+  PUBLIC_DATA_DIR: z.string().default("./dados-publicos"),
 });
 
 export type Env = z.infer<typeof schema>;

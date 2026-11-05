@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "SourceType" ADD VALUE 'RECEITA_DADOS_ABERTOS';
