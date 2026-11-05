@@ -45,7 +45,7 @@ Depois de atualizar:
 - Antes de subir versões, rode `npm audit --omit=dev` em `platform/api` e `platform/web` e os testes.
 - O npm 11 bloqueia scripts de instalação não aprovados (`allowScripts` no `package.json`); aprove só pacotes conhecidos.
 - Imagens de terceiros:
-  - `postgres:17-alpine`, `valkey/valkey:8-alpine`, `axllent/mailpit:v1.31.4`, `asternic/wuzapi:1.0.9`, `nginx:1.30-alpine`, `gosom/google-maps-scraper:v1.18.1`;
+  - `postgres:17-alpine`, `valkey/valkey:8-alpine`, `axllent/mailpit:v1.31.4`, `asternic/wuzapi:1.1.0`, `nginx:1.30-alpine`, `gosom/google-maps-scraper:v1.18.1`;
   - bases `mcr.microsoft.com/playwright:v1.64.1-noble` e `node:24-bookworm-slim`.
 - Ao trocar a versão do Playwright na API, troque também a imagem base e a versão em `platform/e2e`.
 - **Grandes versões do PostgreSQL** exigem backup e restauração: o volume não é compatível entre versões.

@@ -99,7 +99,7 @@ services:
       labels: *no-traefik
 
   wuzapi:
-    image: asternic/wuzapi:1.0.9
+    image: asternic/wuzapi:1.1.0
     environment:
       WUZAPI_ADMIN_TOKEN: ${WUZAPI_ADMIN_TOKEN:?defina WUZAPI_ADMIN_TOKEN no .env}
       WUZAPI_GLOBAL_ENCRYPTION_KEY: ${WUZAPI_GLOBAL_ENCRYPTION_KEY:?defina WUZAPI_GLOBAL_ENCRYPTION_KEY no .env}
