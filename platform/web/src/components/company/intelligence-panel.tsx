@@ -80,7 +80,7 @@ const RESULT_ICON: Record<Result, { icon: typeof Check; tone: string; label: str
   NOT_EVALUATED: { icon: CircleDashed, tone: "text-muted-foreground/70", label: "Não avaliado" },
 };
 const PHONE_KIND = { MOBILE: "Celular", FIXED: "Fixo", TOLL_FREE: "0800", UNKNOWN: "Não identificado" } as const;
-const SOURCE: Record<string, string> = { GOOGLE_MAPS_SCRAPER: "Google Maps", WEBSITE: "Site oficial", MANUAL: "Manual", CSV_IMPORT: "Importação", OSM_OVERPASS: "OpenStreetMap", BRASILAPI_CNPJ: "BrasilAPI", ECONODATA: "Econodata", ECONODATA_SIMULATED: "Econodata (simulado)", RECEITA_DADOS_ABERTOS: "Receita Federal (dados abertos)", SYSTEM: "Prospecta" };
+const SOURCE: Record<string, string> = { GOOGLE_MAPS_SCRAPER: "Google Maps", WEBSITE: "Site oficial", MANUAL: "Manual", CSV_IMPORT: "Importação", OSM_OVERPASS: "OpenStreetMap", BRASILAPI_CNPJ: "BrasilAPI", ECONODATA: "Econodata", ECONODATA_SIMULATED: "Econodata (simulado)", RECEITA_DADOS_ABERTOS: "Receita Federal (dados abertos)", INSTAGRAM: "Instagram (bio)", SYSTEM: "Prospecta" };
 const NEXT_ACTION: Record<string, string> = {
   VERIFY_DECISION_MAKER: "Verificar o responsável comercial",
   QUALIFY_OPERATION: "Qualificar a operação de atendimento",

@@ -7,6 +7,7 @@ import { nameSimilarity, nameTokens } from "../companies/dedupe.ts";
 import { crawlWebsite, type CrawlResult } from "./crawler.ts";
 import { blockedForCollection } from "../privacy/suppression.ts";
 import { checkMx, checkSocialLink, lookupCnpj } from "./verify.ts";
+import { parseSocialUrl } from "./social.ts";
 import { orgIntegration } from "../public-data/http.ts";
 
 const AGENCY_CREDIT = /(desenvolvid|criad[oa] por|feito por|ag[eê]ncia|design(ed)? by|powered by|site por|by\s)/i;
@@ -43,14 +44,48 @@ export function aggregate(crawl: CrawlResult) {
   return { emails, phones, whatsapp, socials, cnpjs: [...cnpjs], jsonLdTypes: [...jsonLdTypes], jsonLdName, legalNameLd };
 }
 
+/**
+ * Lê o perfil do Instagram da empresa quando a integração está ligada e há um @ conhecido (link no site, site que é
+ * o próprio Instagram ou informado à mão). Falha aqui nunca derruba o enriquecimento: vira uma nota.
+ */
+async function readInstagram(company: { id: string; organizationId: string; website: string | null }, userId: string | null, log: { warn: (o: object, m: string) => void }): Promise<string | null> {
+  if (!(await orgIntegration(company.organizationId, "instagram")).enabled) return null;
+  const site = company.website ? parseSocialUrl(company.website) : null;
+  if (site?.network === "INSTAGRAM") {
+    // o site cadastrado é o Instagram: vira perfil social, como na gravação das buscas
+    await prisma.socialProfile.upsert({
+      where: { companyId_network_handle: { companyId: company.id, network: "INSTAGRAM", handle: site.handle } },
+      create: { companyId: company.id, network: "INSTAGRAM", handle: site.handle, url: site.url, source: "SYSTEM", status: "FOUND", confidence: 0.6, evidence: "Cadastrado como site da empresa na fonte de origem" },
+      update: {},
+    });
+  }
+  const hasProfile = await prisma.socialProfile.count({ where: { companyId: company.id, network: "INSTAGRAM", status: { not: "INVALID" } } });
+  if (!hasProfile) return null;
+  try {
+    const { instagramForCompany } = await import("../social/instagram.ts");
+    const r = await instagramForCompany({ organizationId: company.organizationId, companyId: company.id, userId });
+    return `Instagram @${r.handle} lido pela API oficial${r.added.website ? " (site encontrado na bio)" : ""}.`;
+  } catch (err) {
+    log.warn({ err: (err as Error).message }, "leitura do Instagram falhou");
+    return `Instagram não lido: ${(err as Error).message}`;
+  }
+}
+
 export async function processEnrichmentJob(job: Job<EnrichmentJobData>) {
   const ej = await prisma.enrichmentJob.findUnique({ where: { id: job.data.enrichmentJobId }, include: { company: true } });
   if (!ej || ["COMPLETED", "CANCELLED"].includes(ej.status)) return;
-  const company = ej.company;
+  let company = ej.company;
   const log = logger.child({ enrichmentJobId: ej.id, companyId: company.id });
 
+  let instagramNote: string | null = null;
   if (!company.website || !company.domain) {
-    const reason = company.website ? "O site informado é uma plataforma de terceiros (agenda, rede social, link na bio), não um site próprio." : "Empresa sem site informado.";
+    // sem site próprio: o Instagram (API oficial, se a conta ligou) pode trazer contatos e o site declarado na bio
+    instagramNote = await readInstagram(company, ej.requestedById, log);
+    const fresh = await prisma.company.findUniqueOrThrow({ where: { id: company.id } });
+    if (fresh.website && fresh.domain) company = fresh;
+  }
+  if (!company.website || !company.domain) {
+    const reason = [company.website ? "O site informado é uma plataforma de terceiros (agenda, rede social, link na bio), não um site próprio." : "Empresa sem site informado.", instagramNote].filter(Boolean).join(" ");
     await prisma.$transaction([
       prisma.enrichmentJob.update({ where: { id: ej.id }, data: { status: "COMPLETED", finishedAt: new Date(), details: { skipped: true, reason } } }),
       prisma.company.update({ where: { id: company.id }, data: { enrichmentStatus: "SKIPPED" } }),
@@ -263,6 +298,8 @@ export async function processEnrichmentJob(job: Job<EnrichmentJobData>) {
         },
       }),
     ]);
+    // Instagram publicado no site oficial: bio lida pela API oficial (quando a conta ligou a integração)
+    if (!instagramNote) await readInstagram(company, ej.requestedById, log);
     await import("../audit/service.ts").then((m) => m.recomputeDataQuality(company.id)).catch(() => undefined);
     log.info({ status, counts }, "enriquecimento concluído");
   } catch (err) {

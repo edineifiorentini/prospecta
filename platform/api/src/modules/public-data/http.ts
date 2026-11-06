@@ -119,6 +119,10 @@ export type RequestOptions = {
   timeoutMs?: number;
   /** testes: espera entre tentativas */
   sleep?: (ms: number) => Promise<void>;
+  /** novas tentativas em 429/indisponível (padrão 2) */
+  maxRetries?: number;
+  /** erro próprio da fonte (ex.: Graph API devolve 400 com { error: { code } }); null = regra padrão */
+  mapError?: (status: number, body: string) => SourceError | null;
 };
 
 function retryAfter(res: Response) {
@@ -158,14 +162,17 @@ export async function requestJson<T>(id: PublicSourceId, url: string, o: Request
           throw new SourceError("UNAVAILABLE", "resposta fora do formato JSON", res.status);
         }
       }
-      const detail = redactSecrets((await res.text().catch(() => "")).slice(0, 300)) || null;
+      const body = await res.text().catch(() => "");
+      const mapped = o.mapError?.(res.status, body);
+      if (mapped) throw mapped;
+      const detail = redactSecrets(body.slice(0, 300)) || null;
       if (res.status === 401 || res.status === 403) throw new SourceError("AUTH", detail, res.status);
       if (res.status === 429) throw new SourceError("RATE_LIMIT", detail, res.status, retryAfter(res));
       if (res.status === 400 && /api key|chave/i.test(detail ?? "")) throw new SourceError("AUTH", detail, res.status);
       if (res.status >= 400 && res.status < 500) throw new SourceError("INVALID_REQUEST", detail, res.status);
       throw new SourceError("UNAVAILABLE", detail, res.status);
     },
-    { sleep: o.sleep },
+    { sleep: o.sleep, maxRetries: o.maxRetries },
   );
 }
 
@@ -193,5 +200,5 @@ export function sourceHttpError(err: unknown) {
   if (!(err instanceof SourceError)) return err;
   const status = err.code === "DISABLED" || err.code === "NOT_CONFIGURED" || err.code === "AUTH" ? 400 : err.code === "RATE_LIMIT" || err.code === "LIMIT_EXCEEDED" ? 429 : err.code === "NOT_FOUND" ? 404 : err.code === "BLOCKED" || err.code === "INVALID_REQUEST" ? 422 : 502;
   // a mensagem da fonte (detail) já passou por redactSecrets
-  return new AppError(status, err.code, err.code === "INVALID_REQUEST" && err.detail ? err.detail : err.message, err.detail ? { detail: err.detail } : undefined);
+  return new AppError(status, err.code, (err.code === "INVALID_REQUEST" || err.code === "NOT_FOUND") && err.detail ? err.detail : err.message, err.detail ? { detail: err.detail } : undefined);
 }

@@ -16,6 +16,7 @@ import { comexPanel } from "./comex.ts";
 import { deleteSourceKey, KEYED_SOURCES, saveSourceKey, sourceKey, sourceKeyStatus, type KeyedSource } from "./credentials.ts";
 import { cvmPanel } from "./cvm.ts";
 import { integrationConfig, publicMockActive, requestJson, SourceError, sourceHttpError, tracked, usageToday } from "./http.ts";
+import { businessDiscovery, instagramAccount, saveInstagramCredential } from "../social/instagram.ts";
 import { ibgePanel, resolveCity, sectionOfCnae } from "./ibge.ts";
 import { enqueueRadarSync } from "./jobs.ts";
 import { laborPanel } from "./labor.ts";
@@ -93,12 +94,21 @@ export const publicDataRoutes: FastifyPluginAsyncZod = async (app) => {
     "/integrations/:id/credential",
     {
       config: { permission: "settings:manage", rateLimit: { max: 10, timeWindow: "1 minute" } },
-      schema: { tags: ["public-data"], summary: "Cadastra a chave gratuita da fonte (cifrada; nunca volta ao navegador)", params: sourceParams, body: z.object({ apiKey: z.string().trim().min(8).max(300) }) },
+      schema: { tags: ["public-data"], summary: "Cadastra a chave gratuita da fonte (cifrada; nunca volta ao navegador)", params: sourceParams, body: z.object({ apiKey: z.string().trim().min(8).max(600), accountId: z.string().trim().regex(/^\d{5,25}$/).optional() }) },
     },
     async (req) => {
       if (!isKeyed(req.params.id)) throw new AppError(400, "BAD_REQUEST", "Esta fonte não usa chave.");
       const organizationId = orgId(req);
-      const r = await saveSourceKey(organizationId, req.params.id, req.body.apiKey, req.auth!.userId);
+      let r: { keyHint: string };
+      if (req.params.id === "instagram") {
+        // Instagram: token da Meta + ID da conta comercial de quem consulta, conferidos na Graph API antes de salvar
+        if (!req.body.accountId) throw new AppError(422, "VALIDATION", "Informe também o ID da sua conta comercial do Instagram.");
+        try {
+          r = await saveInstagramCredential(organizationId, req.auth!.userId, req.body.apiKey, req.body.accountId);
+        } catch (err) {
+          throw sourceHttpError(err);
+        }
+      } else r = await saveSourceKey(organizationId, req.params.id, req.body.apiKey, req.auth!.userId);
       await writeAudit(req, { action: "integrations.credential_saved", entityType: "organization", entityId: organizationId, metadata: { source: req.params.id, keyHint: r.keyHint } });
       return sourceKeyStatus(organizationId, req.params.id);
     },
@@ -156,6 +166,13 @@ export const publicDataRoutes: FastifyPluginAsyncZod = async (app) => {
               const r = await requestJson<{ totalRegistros?: number }>("pncp", `https://pncp.gov.br/api/consulta/v1/contratacoes/proposta?dataFinal=${end}&uf=DF&pagina=1&tamanhoPagina=10`, { ...ctx, timeoutMs: 60_000 });
               return { value: done(true, `PNCP respondeu (${r?.totalRegistros ?? 0} contratações com proposta aberta no DF).`), records: r?.totalRegistros ?? 0 };
             });
+          case "instagram": {
+            const account = await instagramAccount(organizationId);
+            if (!account && !publicMockActive()) return done(false, "Cadastre o token e o ID da conta comercial antes de testar.");
+            // perfil comercial público da própria Meta, só para conferir que a consulta funciona
+            const p = await businessDiscovery(organizationId, "instagram", cfg.maxDailyRequests);
+            return done(true, `Graph API respondeu${account?.username ? ` (consultando como @${account.username})` : ""}: @${p.username} tem ${p.followersCount ?? "?"} seguidores.`);
+          }
           case "transparencia":
           case "pagespeed": {
             const key = await sourceKey(organizationId, id);

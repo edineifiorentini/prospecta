@@ -50,6 +50,7 @@ const KIND: Record<string, string> = {
   emprego: "Emprego",
   comercio_exterior: "Comércio exterior",
   financeiro: "Financeiro",
+  redes_sociais: "Redes sociais",
 };
 const SCOPE: Record<Source["scope"], string> = { company: "dado da empresa", regional: "dado do município", catalog: "catálogo público" };
 const ACCESS: Record<Source["access"], string> = { api: "API pública", api_chave_gratuita: "API com chave gratuita", arquivo_local: "arquivo oficial importado" };
@@ -97,6 +98,9 @@ function SourceCard({ source: s, simulated }: { source: Source; simulated: boole
   const editable = can("settings:manage");
   const [form, setForm] = useState<Config>(s.config);
   const [key, setKey] = useState("");
+  // Instagram: além do token, o ID da conta comercial de quem consulta (Business Discovery)
+  const [accountId, setAccountId] = useState("");
+  const needsAccount = s.id === "instagram";
   const [test, setTest] = useState<TestResult | null>(null);
   const refresh = () => qc.invalidateQueries({ queryKey: ["integrations"] });
   const dirty = JSON.stringify(form) !== JSON.stringify(s.config);
@@ -110,10 +114,11 @@ function SourceCard({ source: s, simulated }: { source: Source; simulated: boole
     onError: (e) => toast.error(errorMessage(e)),
   });
   const saveKey = useMutation({
-    mutationFn: () => api(`/integrations/${s.id}/credential`, { method: "PUT", body: { apiKey: key.trim() } }),
+    mutationFn: () => api(`/integrations/${s.id}/credential`, { method: "PUT", body: { apiKey: key.trim(), ...(needsAccount ? { accountId: accountId.trim() } : {}) } }),
     onSuccess: () => {
-      toast.success("Chave salva (cifrada no servidor)");
+      toast.success(needsAccount ? "Token conferido na Meta e salvo (cifrado no servidor)" : "Chave salva (cifrada no servidor)");
       setKey("");
+      setAccountId("");
       refresh();
     },
     onError: (e) => toast.error(errorMessage(e)),
@@ -210,11 +215,14 @@ function SourceCard({ source: s, simulated }: { source: Source; simulated: boole
                 className="flex flex-wrap gap-2"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (key.trim()) saveKey.mutate();
+                  if (key.trim() && (!needsAccount || accountId.trim())) saveKey.mutate();
                 }}
               >
-                <Input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Cole a chave gratuita" aria-label={`Chave de ${s.name}`} autoComplete="new-password" spellCheck={false} data-1p-ignore data-lpignore="true" className="h-8 max-w-sm flex-1 font-mono text-xs" />
-                <Button type="submit" size="sm" disabled={!key.trim() || saveKey.isPending}>
+                {needsAccount && (
+                  <Input value={accountId} onChange={(e) => setAccountId(e.target.value.replace(/\D/g, ""))} placeholder="ID da conta comercial (números)" aria-label="ID da conta comercial do Instagram" inputMode="numeric" className="h-8 w-56 font-mono text-xs" />
+                )}
+                <Input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={needsAccount ? "Token de acesso da Meta" : "Cole a chave gratuita"} aria-label={`Chave de ${s.name}`} autoComplete="new-password" spellCheck={false} data-1p-ignore data-lpignore="true" className="h-8 max-w-sm flex-1 font-mono text-xs" />
+                <Button type="submit" size="sm" disabled={!key.trim() || (needsAccount && !accountId.trim()) || saveKey.isPending}>
                   {saveKey.isPending && <Loader2 className="animate-spin" />} Salvar chave
                 </Button>
                 {s.credential?.hasKey && (
@@ -223,6 +231,11 @@ function SourceCard({ source: s, simulated }: { source: Source; simulated: boole
                   </Button>
                 )}
               </form>
+            )}
+            {needsAccount && (
+              <p className="text-xs text-muted-foreground">
+                Precisa de uma conta comercial ou de criador no Instagram ligada a uma Página do Facebook, de um app na Meta e de um token de usuário com instagram_basic e pages_read_engagement (a documentação também cita instagram_manage_insights). O ID da conta comercial aparece no Explorador da Graph API ao consultar a Página com o campo instagram_business_account. Ao salvar, o Prospecta confere o token na Meta.
+              </p>
             )}
             <p className="text-xs text-muted-foreground">Cada conta usa a própria chave. Ela fica cifrada no servidor e nunca volta para o navegador.</p>
           </div>

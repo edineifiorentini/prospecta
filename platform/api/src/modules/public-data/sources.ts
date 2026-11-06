@@ -6,10 +6,10 @@
  * - scope "regional": estatística agregada de município/UF — nunca é atribuída a uma empresa.
  * - scope "catalog": catálogo público consultado à parte (ex.: contratações do PNCP).
  */
-export const PUBLIC_SOURCE_IDS = ["brasilapi", "lighthouse", "pagespeed", "receita_aberta", "pncp", "transparencia", "ibge", "comexstat", "caged", "cvm"] as const;
+export const PUBLIC_SOURCE_IDS = ["brasilapi", "lighthouse", "pagespeed", "receita_aberta", "pncp", "transparencia", "ibge", "comexstat", "caged", "cvm", "instagram"] as const;
 export type PublicSourceId = (typeof PUBLIC_SOURCE_IDS)[number];
 
-export type SourceKind = "identificacao" | "cadastral" | "digital" | "contratacoes" | "economico" | "emprego" | "comercio_exterior" | "financeiro";
+export type SourceKind = "identificacao" | "cadastral" | "digital" | "contratacoes" | "economico" | "emprego" | "comercio_exterior" | "financeiro" | "redes_sociais";
 /** como a fonte é acessada: API sem cadastro, API com chave/token gratuito, ou base local importada de arquivos oficiais */
 export type SourceAccess = "api" | "api_chave_gratuita" | "arquivo_local";
 
@@ -156,6 +156,20 @@ export const PUBLIC_SOURCES: SourceDef[] = [
     defaults: { enabled: false, concurrency: 2, cacheDays: 90, maxDailyRequests: 5000, scheduled: false },
     description: "Demonstrações financeiras padronizadas (receita, resultado, ativo, passivo, patrimônio) de companhias abertas.",
     caveat: "Só existe para companhias registradas na CVM com o mesmo CNPJ. Empresas fechadas não aparecem aqui.",
+  },
+  {
+    id: "instagram",
+    name: "Instagram (API oficial)",
+    kind: "redes_sociais",
+    scope: "company",
+    access: "api_chave_gratuita",
+    credentialUrl: "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/business-discovery",
+    docsUrl: "https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/business_discovery",
+    // a Meta conta por app (200 chamadas por hora por usuário do app) e não publica o limite por token
+    ratePerMinute: 3,
+    defaults: { enabled: false, concurrency: 1, cacheDays: 30, maxDailyRequests: 150, scheduled: false },
+    description: "Lê a bio, o site, os seguidores e o número de posts de perfis comerciais ou de criador, e extrai da bio WhatsApp, telefone, e-mail e site.",
+    caveat: "Só perfis comerciais ou de criador; perfil pessoal ou privado não aparece. Precisa de uma conta comercial sua no Instagram e de um token da Meta. Nada é raspado do site do Instagram.",
   },
 ];
 

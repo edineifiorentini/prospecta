@@ -19,6 +19,7 @@ import { EditableField } from "@/components/company/editable-field";
 import { DataStatusLegend } from "@/components/company/provenance";
 import { ContactsCard } from "@/components/company/contacts-card";
 import { SocialCard, SourcesCard, WebsiteCard } from "@/components/company/presence-cards";
+import { InstagramCard } from "@/components/company/instagram-card";
 import { Timeline } from "@/components/company/timeline";
 import { NotesPanel } from "@/components/company/notes-panel";
 import { CrmCard, ScoresCard, TagsCard } from "@/components/company/side-cards";
@@ -258,6 +259,7 @@ export default function CompanyPage() {
             )}
             <ContactsCard companyId={c.id} contacts={c.contacts} canEdit={canEdit} />
             <SocialCard socials={c.socialProfiles} />
+            <InstagramCard companyId={c.id} />
             <WebsiteCard company={c} />
             <SourcesCard company={c} />
           </TabsContent>

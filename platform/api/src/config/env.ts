@@ -56,6 +56,8 @@ const schema = z.object({
   PUBLIC_DATA_MOCK_MODE: bool,
   /** pasta de onde a importação de arquivos públicos (Receita, CAGED, CVM) lê os arquivos já baixados */
   PUBLIC_DATA_DIR: z.string().default("./dados-publicos"),
+  /** versão da Graph API da Meta usada no Instagram Business Discovery (a documentação conferida em 06/11/2026 usa v27.0) */
+  META_GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/).default("v27.0"),
 });
 
 export type Env = z.infer<typeof schema>;

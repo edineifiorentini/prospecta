@@ -189,6 +189,8 @@ enum SourceType {
   BRASILAPI_CNPJ
   ECONODATA
   RECEITA_DADOS_ABERTOS
+  /// bio e site de perfil comercial lidos pela API oficial do Instagram (Business Discovery)
+  INSTAGRAM
   SYSTEM
 }
 
@@ -374,6 +376,8 @@ model SocialProfile {
   /// evidência de vínculo com a empresa (ex.: link no rodapé do site oficial)
   evidence      String?
   httpStatus    Int?          @map("http_status")
+  /// dados públicos do perfil lidos pela API oficial (bio, site, seguidores, posts, data da leitura)
+  details       Json?
   lastCheckedAt DateTime?     @map("last_checked_at")
   createdAt     DateTime      @default(now()) @map("created_at")
   company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)

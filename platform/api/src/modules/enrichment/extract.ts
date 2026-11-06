@@ -32,9 +32,9 @@ export type PageExtraction = {
   technologies?: Technology[];
 };
 
-const EMAIL_IN_TEXT = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
+export const EMAIL_IN_TEXT = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
 // telefones brasileiros com DDD: (19) 3325-7728, 19 99120-0967, +55 19 3325 7728, 0800 …
-const PHONE_IN_TEXT = /(?:\+?55[\s.-]?)?\(?\b[1-9]{2}\)?[\s.-]?(?:9[\s.-]?)?\d{4}[\s.-]?\d{4}\b|\b0800[\s.-]?\d{3}[\s.-]?\d{4}\b/g;
+export const PHONE_IN_TEXT = /(?:\+?55[\s.-]?)?\(?\b[1-9]{2}\)?[\s.-]?(?:9[\s.-]?)?\d{4}[\s.-]?\d{4}\b|\b0800[\s.-]?\d{3}[\s.-]?\d{4}\b/g;
 const CNPJ_RE = /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g;
 const CTA_RE = /(fale conosco|entre em contato|contato|agende|agendar|marque (sua|uma) consulta|solicite|or[cç]amento|comprar|compre|whatsapp|ligue|reserve|reservar|matricule|assine|cadastre|saiba mais|pe[cç]a)/i;
 

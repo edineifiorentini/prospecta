@@ -15,6 +15,7 @@ export const SOURCE_CONFIDENCE: Record<SourceType, number> = {
   BRASILAPI_CNPJ: 0.9,
   ECONODATA: 0.9,
   RECEITA_DADOS_ABERTOS: 0.95,
+  INSTAGRAM: 0.75,
   SYSTEM: 0.5,
 };
 
@@ -247,7 +248,9 @@ export async function upsertDiscovered(ctx: UpsertContext, rec: DiscoveredCompan
           update: {},
         });
       }
-      for (const s of rec.socials ?? []) {
+      const websiteSocial = rec.website ? parseSocialUrl(rec.website) : null;
+      const socials: { network: string; url: string; fromWebsite?: true }[] = [...(rec.socials ?? []), ...(websiteSocial && websiteSocial.network !== "WHATSAPP" ? [{ network: websiteSocial.network, url: websiteSocial.url, fromWebsite: true as const }] : [])];
+      for (const s of socials) {
         const parsed = parseSocialUrl(s.url, s.network as SocialNetwork);
         if (!parsed) continue;
         await tx.socialProfile.upsert({
@@ -261,7 +264,7 @@ export async function upsertDiscovered(ctx: UpsertContext, rec: DiscoveredCompan
             sourceUrl: rec.sourceUrl ?? null,
             status: "FOUND",
             confidence: conf * 0.8,
-            evidence: ctx.source === "OSM_OVERPASS" ? "Etiqueta contact:* do estabelecimento no OpenStreetMap" : `Informado pela fonte ${ctx.source}`,
+            evidence: s.fromWebsite ? "Cadastrado como site da empresa na fonte de origem" : ctx.source === "OSM_OVERPASS" ? "Etiqueta contact:* do estabelecimento no OpenStreetMap" : `Informado pela fonte ${ctx.source}`,
           },
           update: {},
         });

@@ -27,6 +27,7 @@ export const SOURCE_LABEL: Record<string, string> = {
   WEBSITE: "Site oficial",
   BRASILAPI_CNPJ: "CNPJ (BrasilAPI)",
   ECONODATA: "Econodata",
+  INSTAGRAM: "Instagram (bio)",
   SYSTEM: "Sistema",
 };
 

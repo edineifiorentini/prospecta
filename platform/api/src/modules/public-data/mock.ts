@@ -211,6 +211,37 @@ function pagespeed(url: URL): Response {
   });
 }
 
+/**
+ * Graph API (Instagram Business Discovery) simulada: token com "invalida" → erro 190; @ com "pessoal" → perfil não
+ * comercial (erro 110); @ com "limite" → erro 4 (limite do app); senão, bio sintética com WhatsApp, e-mail e site.
+ */
+function instagram(url: URL): Response {
+  const token = url.searchParams.get("access_token") ?? "";
+  const err = (status: number, code: number, message: string, subcode?: number) => json(status, { error: { message: `${message} (simulado)`, type: "OAuthException", code, ...(subcode ? { error_subcode: subcode } : {}), fbtrace_id: "simulado" } });
+  if (!token || token.toLowerCase().includes("invalida")) return err(400, 190, "Error validating access token: Session has expired");
+  const fields = url.searchParams.get("fields") ?? "";
+  const igId = url.pathname.split("/").filter(Boolean).at(-1) ?? "";
+  if (!fields.startsWith("business_discovery")) return json(200, { id: igId, username: "minha_conta_simulada" });
+  const username = fields.match(/business_discovery\.username\(([^)]+)\)/)?.[1] ?? "";
+  if (username.includes("limite")) return err(400, 4, "Application request limit reached");
+  if (username.includes("pessoal") || username.includes("inexistente")) return err(400, 110, `Invalid user id: the user with username ${username} cannot be found`, 2207013);
+  const n = h(username) % 9000;
+  return json(200, {
+    business_discovery: {
+      id: `1784140${String(n).padStart(10, "0")}`,
+      username,
+      biography: `Atendimento de seg a sex 🕗 8h às 18h
+📲 WhatsApp (44) 9 ${String(8000 + (n % 1999)).padStart(4, "0")}-${String(n % 10000).padStart(4, "0")}
+✉️ contato@${username.replace(/[^a-z0-9]/g, "")}.com.br
+Umuarama - PR (simulado)`,
+      website: username.includes("linktree") ? `https://linktr.ee/${username}` : `https://www.${username.replace(/[^a-z0-9]/g, "")}.com.br`,
+      followers_count: 500 + n,
+      media_count: 40 + (n % 300),
+    },
+    id: igId,
+  });
+}
+
 /** `fetch` que responde como as fontes públicas, sem rede. */
 export function createPublicDataMock(): typeof fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
@@ -226,6 +257,8 @@ export function createPublicDataMock(): typeof fetch {
         return pncp(url);
       case "api.portaldatransparencia.gov.br":
         return transparencia(url, headers);
+      case "graph.facebook.com":
+        return instagram(url);
       case "www.googleapis.com":
         return pagespeed(url);
       default:

@@ -135,7 +135,7 @@ function findContradictions(c: CompanySnapshot): CompanyFacts["contradictions"] 
 }
 
 const SOCIAL_LABEL: Record<string, string> = { INSTAGRAM: "Instagram", FACEBOOK: "Facebook", LINKEDIN: "LinkedIn", TIKTOK: "TikTok", YOUTUBE: "YouTube", X: "X", THREADS: "Threads", PINTEREST: "Pinterest" };
-const SOURCE_LABEL: Record<string, string> = { GOOGLE_MAPS_SCRAPER: "ficha do Google Maps", WEBSITE: "site oficial", MANUAL: "registro manual", CSV_IMPORT: "importação", OSM_OVERPASS: "OpenStreetMap", BRASILAPI_CNPJ: "BrasilAPI (CNPJ)", ECONODATA: "Econodata", ECONODATA_SIMULATED: "Econodata (simulado)", RECEITA_DADOS_ABERTOS: "Receita Federal (dados abertos)", SYSTEM: "Prospecta" };
+const SOURCE_LABEL: Record<string, string> = { GOOGLE_MAPS_SCRAPER: "ficha do Google Maps", WEBSITE: "site oficial", MANUAL: "registro manual", CSV_IMPORT: "importação", OSM_OVERPASS: "OpenStreetMap", BRASILAPI_CNPJ: "BrasilAPI (CNPJ)", ECONODATA: "Econodata", ECONODATA_SIMULATED: "Econodata (simulado)", RECEITA_DADOS_ABERTOS: "Receita Federal (dados abertos)", INSTAGRAM: "Instagram (bio)", SYSTEM: "Prospecta" };
 export const sourceLabel = (s: string) => SOURCE_LABEL[s] ?? s;
 
 export function collectFacts(c: CompanySnapshot): CompanyFacts {

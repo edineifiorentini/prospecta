@@ -44,6 +44,7 @@ que o Prospecta já usava e continuam ligados. Qualquer fonte pode ficar desliga
 | Comex Stat | Exportações e importações do município (FOB US$, kg, produtos, países) | API sem cadastro | implementada; API real conferida |
 | Novo CAGED | Admissões, desligamentos e saldo por município e seção | arquivos importados | implementada, validada com amostra sintética |
 | CVM | Contas principais da DFP de companhias abertas | arquivos importados | implementada, validada com amostra sintética |
+| Instagram (API oficial) | Bio, site, seguidores e posts de perfis comerciais/criador; WhatsApp, telefone, e-mail e site extraídos da bio | token da Meta + conta comercial | implementada, validada só com simulado |
 
 Endpoints conferidos em 03/11/2026, só com parâmetros públicos (município, UF, datas):
 
@@ -58,6 +59,38 @@ Endpoints conferidos em 03/11/2026, só com parâmetros públicos (município, U
   (cabeçalho `chave-api-dados`). Só a documentação (swagger v3) foi conferida, porque a API exige token.
 - **PageSpeed:** `www.googleapis.com/pagespeedonline/v5/runPagespeed`. Sem chave, a cota anônima devolveu 429 no teste
   real.
+
+## Instagram (API oficial)
+
+Lê perfis do Instagram pela **Graph API da Meta (Business Discovery)**, sem raspar o site do Instagram. Código em
+`api/src/modules/social/`.
+
+- **Endpoint** (documentação conferida em 06/11/2026): `GET graph.facebook.com/{versão}/{ID da conta comercial de quem consulta}?fields=business_discovery.username({@}){username,biography,website,followers_count,media_count}`.
+  Versão em `META_GRAPH_VERSION` (padrão `v27.0`). Só campos marcados como públicos na referência do IG User.
+- **O que precisa** (por conta, em Configurações › Integrações):
+  - uma conta comercial ou de criador no Instagram, ligada a uma Página do Facebook;
+  - um app na Meta e um token de usuário com `instagram_basic` e `pages_read_engagement` (a página do Business Discovery
+    também cita `instagram_manage_insights`);
+  - o ID dessa conta comercial (campo `instagram_business_account` da Página).
+  Ao salvar, o Prospecta confere o token na Meta (`GET /{ID}?fields=username`); token e ID ficam cifrados e nunca voltam ao navegador.
+- **Quem aparece:** só perfis comerciais ou de criador. Perfil pessoal, privado ou com restrição de idade devolve "não encontrado".
+  O código de erro para esse caso não está na documentação; o Prospecta trata os casos 110, 2207013 e "cannot be found".
+- **De onde vem o @:** link do Instagram no site oficial (já coletado), site cadastrado que é o próprio Instagram (comum no
+  Google Maps; agora vira também perfil social) ou o @ informado na ficha.
+- **O que é gravado:**
+  - no perfil social: bio, site, seguidores, posts e a data da leitura (`social_profiles.details`);
+  - em Contatos, com origem `INSTAGRAM` ("Instagram (bio)"): WhatsApp só com link wa.me ou celular junto de "whats", "zap"
+    ou "wpp"; o resto fica como telefone;
+  - o site da bio vira o site da empresa quando ela não tinha site próprio (agregador como linktr.ee não conta).
+    O próximo "Enriquecer" analisa esse site.
+  - Número já existente por outra fonte passa a confirmado. Nada existente é sobrescrito. Contato na lista de bloqueio não volta.
+- **Vínculo:** o perfil fica "Vínculo confirmado" quando o site ou um telefone da bio batem com os da empresa.
+- **Quando roda:** botão na ficha (Visão geral › Instagram) e dentro do "Enriquecer", quando a integração está ligada e há um @
+  conhecido. Sem site próprio, o "Enriquecer" lê o Instagram e, se a bio trouxer um site, já o analisa no mesmo processo.
+- **Limites:** a Meta limita por app (200 chamadas por hora por usuário do app) e não publica o limite por token. O Prospecta
+  se limita a 3 consultas por minuto e a 150 por dia por conta, e reaproveita a leitura por 30 dias (configurável). Erros 4,
+  17, 32, 341, 613 e 80002 viram "limite atingido" e não são repetidos.
+- **Testes:** `test/unit/instagram.test.ts` e `test/integration/instagram.test.ts`, com a Graph API simulada (sem rede).
 
 ## Central de integrações
 
@@ -193,6 +226,8 @@ Ficam só o último exercício e as contas principais:
   (gov.br).
 - **PageSpeed Insights:** chave de API do Google Cloud. Veja
   <https://developers.google.com/speed/docs/insights/v5/get-started#APIKey>.
+- **Instagram:** token de usuário de um app da Meta e o ID da conta comercial. Veja a seção Instagram acima e
+  <https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/business-discovery>.
 
 ## Testes
 
