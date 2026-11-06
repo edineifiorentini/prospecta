@@ -10,6 +10,8 @@ import type { EconodataCompany } from "./normalize.ts";
  * Endpoints usados (contrato público):
  * - POST /v4/companies/match   — identificação por critérios soltos (até 5 candidatos com confiança)
  * - POST /v4/companies/search  — consulta por CNPJ com os blocos pedidos em `incluir`
+ * - POST /v4/companies/search_list — prospecção: segmentação paginada por filtros (cobra base + campos por empresa)
+ * - POST /v4/companies/calc_list   — só a contagem da segmentação (sem empresas)
  * - GET  /v4/account/balance   — saldo de tokens (nunca cobra)
  * Todo endpoint de dados aceita `X-Estimate-Only: true`: devolve { tokensEstimados } sem cobrar nem entregar dado.
  */
@@ -23,10 +25,23 @@ export type CallMeta = { httpStatus: number; tokensCharged: number; durationMs: 
 export type CallResult<T> = { data: T; meta: CallMeta };
 export type Estimate = { tokensEstimados: number };
 
+/** Filtros da segmentação (SearchFilters do contrato): só os que o Prospecta usa. */
+export type EconodataFilters = {
+  situacao?: string[];
+  uf?: string[];
+  cidade?: string[];
+  cnaePrimario?: string[];
+  porte?: string[];
+  palavrasChave?: { incluir?: string[]; excluir?: string[]; em?: ("NOME_EMPRESA" | "PRODUTOS_SERVICOS")[] };
+  comTelefones?: boolean;
+};
+export type EconodataSearchBody = { filtros: EconodataFilters; pagina?: { tamanho?: number; cursor?: string | null }; incluir?: EconodataBucket[] };
+export type EconodataSearchPage = { totalRegistros: number; pagina: { tamanho: number; cursorProximo?: string | null }; resultados: EconodataCompany[] };
+
 export const isEstimate = (x: unknown): x is Estimate => !!x && typeof (x as Estimate).tokensEstimados === "number";
 
 type Options = { apiKey: string; baseUrl: string; fetch?: typeof fetch; timeoutMs?: number };
-type RequestOptions = { body?: unknown; estimateOnly?: boolean; signal?: AbortSignal };
+type RequestOptions = { body?: unknown; estimateOnly?: boolean; signal?: AbortSignal; timeoutMs?: number };
 
 const STATUS_CODE: Record<number, ProviderErrorCode> = { 400: "INVALID_REQUEST", 401: "AUTH", 402: "INSUFFICIENT_BALANCE", 403: "FORBIDDEN", 404: "NOT_FOUND", 422: "INVALID_REQUEST", 429: "RATE_LIMIT" };
 
@@ -75,7 +90,7 @@ export function createEconodataClient(opts: Options) {
     const headers: Record<string, string> = { Authorization: `Bearer ${opts.apiKey}`, Accept: "application/json" };
     if (o.body !== undefined) headers["Content-Type"] = "application/json";
     if (o.estimateOnly) headers["X-Estimate-Only"] = "true";
-    const signals = [AbortSignal.timeout(opts.timeoutMs ?? 20_000), ...(o.signal ? [o.signal] : [])];
+    const signals = [AbortSignal.timeout(o.timeoutMs ?? opts.timeoutMs ?? 20_000), ...(o.signal ? [o.signal] : [])];
     const started = Date.now();
     let res: Response;
     try {
@@ -112,6 +127,11 @@ export function createEconodataClient(opts: Options) {
         estimateOnly: o.estimateOnly,
         signal: o.signal,
       }),
+    /** Prospecção: uma página da segmentação por filtros (a primeira já traz o total). */
+    searchList: (body: EconodataSearchBody, o: { estimateOnly?: boolean; signal?: AbortSignal } = {}) =>
+      request<EconodataSearchPage | Estimate>("POST", "/v4/companies/search_list", { body, estimateOnly: o.estimateOnly, signal: o.signal, timeoutMs: 60_000 }),
+    /** Quantas empresas a segmentação devolveria, sem trazer empresas. */
+    calcList: (filtros: EconodataFilters, signal?: AbortSignal) => request<{ totalRegistros: number }>("POST", "/v4/companies/calc_list", { body: { filtros }, signal }),
     /** Saldo de tokens da conta no fornecedor (nunca cobra). */
     balance: (signal?: AbortSignal) => request<{ saldoTokens: number }>("GET", "/v4/account/balance", { signal }),
   };

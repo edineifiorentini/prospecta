@@ -9,10 +9,11 @@ beforeAll(async () => {
 });
 afterAll(closeAll);
 
-describe("fontes de busca (padrão: só Google Maps)", () => {
-  it("lista só o Google Maps e a importação de CSV", async () => {
-    const ids = (await call(admin, "GET", "/api/sources")).json().map((s: { id: string }) => s.id);
-    expect(ids).toEqual(["GOOGLE_MAPS_SCRAPER", "CSV_IMPORT"]);
+describe("fontes de busca (padrão: Google Maps; Econodata só com dados empresariais ligados)", () => {
+  it("lista o Google Maps, a Econodata (indisponível até ligar os dados empresariais) e a importação de CSV", async () => {
+    const list = (await call(admin, "GET", "/api/sources")).json() as { id: string; available: boolean; reason: string | null }[];
+    expect(list.map((s) => s.id)).toEqual(["GOOGLE_MAPS_SCRAPER", "ECONODATA", "CSV_IMPORT"]);
+    expect(list.find((s) => s.id === "ECONODATA")).toMatchObject({ available: false, reason: expect.stringContaining("Dados empresariais") });
   });
 
   it("recusa novas buscas no OpenStreetMap", async () => {

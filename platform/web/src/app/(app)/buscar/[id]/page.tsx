@@ -114,9 +114,10 @@ export default function SearchResultsPage() {
         }
       />
       {j && (
-        <SectionCard className="mb-6" title="Andamento" description={params.city ? `Área: ${[params.neighborhood, params.city, params.state].filter(Boolean).join(", ")} · raio ${params.radiusKm} km · até ${params.limit} empresas` : undefined}>
+        <SectionCard className="mb-6" title="Andamento" description={params.city ? `Área: ${[params.neighborhood, params.city, params.state].filter(Boolean).join(", ")}${j.provider === "ECONODATA" ? "" : ` · raio ${params.radiusKm} km`} · até ${params.limit} empresas` : undefined}>
           <JobProgress job={j} />
           {j.provider === "OSM_OVERPASS" && <p className="mt-3 text-[11px] text-muted-foreground">Dados © colaboradores do OpenStreetMap, disponíveis sob a licença ODbL.</p>}
+          {j.provider === "ECONODATA" && <p className="mt-3 text-[11px] text-muted-foreground">Dados licenciados pela Econodata e cobrados em tokens da conta. Os dados de cada empresa ficam na ficha, em Dados empresariais.</p>}
           {j.provider === "GOOGLE_MAPS_SCRAPER" && (
             <p className="mt-3 text-[11px] text-muted-foreground">Coletado com o motor gosom/google-maps-scraper (MIT). Trate como leads a verificar; não redistribua dados do Google.</p>
           )}

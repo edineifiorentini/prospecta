@@ -21,7 +21,7 @@ export type SearchProgress = {
 
 export type SearchJob = {
   id: string;
-  provider: "OSM_OVERPASS" | "GOOGLE_MAPS_SCRAPER" | "CSV_IMPORT";
+  provider: "OSM_OVERPASS" | "GOOGLE_MAPS_SCRAPER" | "ECONODATA" | "CSV_IMPORT";
   name: string;
   status: JobStatus;
   params?: Record<string, unknown>;

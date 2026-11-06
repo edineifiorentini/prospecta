@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronRight, FileSpreadsheet, Globe2, MapPin, RotateCcw, Square } from "lucide-react";
+import { Building2, ChevronRight, FileSpreadsheet, Globe2, MapPin, RotateCcw, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/page";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,7 +13,7 @@ import { ACTIVE_STATUSES, type Page, type SearchJob } from "@/lib/types";
 import { useSession } from "@/lib/session";
 import { JobProgress, JobStatusBadge } from "./job-progress";
 
-const ICONS = { OSM_OVERPASS: Globe2, GOOGLE_MAPS_SCRAPER: MapPin, CSV_IMPORT: FileSpreadsheet } as const;
+const ICONS = { OSM_OVERPASS: Globe2, GOOGLE_MAPS_SCRAPER: MapPin, ECONODATA: Building2, CSV_IMPORT: FileSpreadsheet } as const;
 
 export function JobList() {
   const qc = useQueryClient();

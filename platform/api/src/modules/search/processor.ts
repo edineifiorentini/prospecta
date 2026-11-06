@@ -8,7 +8,7 @@ import { mapCsvRow, type ColumnMapping } from "../imports/csv-import.ts";
 import { CancelledError, matchesFilters, searchFiltersSchema, searchParamsSchema, type DiscoveredCompany, type ProgressUpdate } from "../sources/types.ts";
 import { getAdapter } from "./registry.ts";
 import { recomputeDataQuality } from "../audit/service.ts";
-import { autoEnrichAfterSearch } from "../company-data/service.ts";
+import { autoEnrichAfterSearch, saveSearchProfile } from "../company-data/service.ts";
 
 export const csvRowsKey = (searchJobId: string) => `pp:csvjob:${searchJobId}`;
 
@@ -63,6 +63,9 @@ export async function processSearchJob(job: Job<SearchJobData>) {
       sourceRef = sj.name;
       records = await adapter.run({
         searchJobId: id,
+        organizationId: sj.organizationId,
+        userId: sj.createdById,
+        maxResults: (sj.params as { quotaCap?: number }).quotaCap ?? params.limit,
         params,
         progress: (p) => saveProgress(p, p.phase === "running" ? "RUNNING" : undefined),
         isCancelled,
@@ -99,6 +102,8 @@ export async function processSearchJob(job: Job<SearchJobData>) {
           { organizationId: sj.organizationId, source: sj.provider, sourceRef, searchJobId: id, userId: sj.createdById, fallbackCity, fallbackState },
           rec,
         );
+        // fonte que já é provedor de dados (Econodata): o perfil pago entra direto como dado empresarial
+        if (rec.businessProfile) await saveSearchProfile(sj.organizationId, r.companyId, rec.businessProfile).catch((err) => log.warn({ err: (err as Error).message }, "perfil empresarial da busca não gravado"));
         await recomputeDataQuality(r.companyId).catch(() => undefined);
         if (r.isNew) imported++;
         else duplicates++;

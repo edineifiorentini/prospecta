@@ -2,6 +2,7 @@ import { prisma, type Prisma, type SourceType, type DataStatus, type SocialNetwo
 import { normAddress, normDomain, normName, normalizeEmail, normalizePhone, uniq } from "../../lib/normalize.ts";
 import type { DiscoveredCompany } from "../sources/types.ts";
 import { confirmsDuplicate, type DedupeCandidate } from "./dedupe.ts";
+import { formatCnpj, isValidCnpj } from "../company-data/cnpj.ts";
 import { blockedForCollection } from "../privacy/suppression.ts";
 import { parseSocialUrl } from "../enrichment/social.ts";
 
@@ -37,10 +38,16 @@ const SELECT_CANDIDATE = { id: true, name: true, city: true, latitude: true, lon
 export async function findDuplicate(
   tx: Prisma.TransactionClient,
   organizationId: string,
-  rec: Pick<DiscoveredCompany, "name" | "city" | "latitude" | "longitude" | "googlePlaceId" | "googleCid" | "osmId" | "website" | "address">,
+  rec: Pick<DiscoveredCompany, "name" | "city" | "latitude" | "longitude" | "googlePlaceId" | "googleCid" | "osmId" | "website" | "address"> & { cnpj?: string | null },
   phonesE164: string[],
 ): Promise<{ id: string; matchedBy: string } | null> {
   const base = { organizationId };
+  // CNPJ válido identifica o estabelecimento: é o vínculo mais forte que uma fonte pode trazer
+  const cnpj = (rec.cnpj ?? "").replace(/D/g, "");
+  if (cnpj.length === 14 && isValidCnpj(cnpj)) {
+    const hit = await tx.company.findFirst({ where: { ...base, cnpj: { in: [cnpj, formatCnpj(cnpj)!] } }, select: { id: true } });
+    if (hit) return { id: hit.id, matchedBy: "cnpj" };
+  }
   if (rec.googlePlaceId) {
     const hit = await tx.company.findFirst({ where: { ...base, googlePlaceId: rec.googlePlaceId }, select: { id: true } });
     if (hit) return { id: hit.id, matchedBy: "google_place_id" };

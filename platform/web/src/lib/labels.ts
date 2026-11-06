@@ -26,6 +26,7 @@ export const SOURCE_LABEL: Record<string, string> = {
   MANUAL: "Cadastro manual",
   WEBSITE: "Site oficial",
   BRASILAPI_CNPJ: "CNPJ (BrasilAPI)",
+  ECONODATA: "Econodata",
   SYSTEM: "Sistema",
 };
 

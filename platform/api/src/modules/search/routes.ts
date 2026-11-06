@@ -16,6 +16,9 @@ import { detectMapping, mapCsvRow, mappingSchema, parseCsv } from "../imports/cs
 import { ADAPTERS, DEFAULT_SOURCE } from "./registry.ts";
 import { csvRowsKey } from "./processor.ts";
 import { applyCap, reserveSearch, searchUsage } from "./quota.ts";
+import { econodataOptions, previewEconodataSearch, searchBuckets } from "../company-data/search.ts";
+import type { ProviderError } from "../company-data/types.ts";
+import { credentialInfo, dataSettingsOf, simulationActive } from "../company-data/service.ts";
 
 const ACTIVE = ["QUEUED", "SUBMITTED", "RUNNING", "DOWNLOADING", "IMPORTING"] as const;
 const idParams = z.object({ id: z.uuid() });
@@ -26,11 +29,23 @@ async function loadJob(organizationId: string, id: string) {
   return job;
 }
 
+/** Econodata como fonte: só com dados empresariais ligados e chave da conta (ou o simulado fora de produção). */
+async function econodataBlock(organizationId: string, settings: ReturnType<typeof readOrgSettings>): Promise<string | null> {
+  if (!settings.dataEnrichment.enabled) return "Ative os dados empresariais em Configurações › Dados empresariais.";
+  if (!simulationActive() && !(await credentialInfo(organizationId)).hasKey) return "Cadastre a chave da Econodata em Configurações › Dados empresariais.";
+  return null;
+}
+
 /** Confere se a fonte está habilitada e, no Google Maps, os limites de uso da organização. */
 async function assertCanRun(organizationId: string, provider: string) {
   if (!ADAPTERS[provider]) throw unprocessable("Esta fonte de busca está desativada. Use o Google Maps.");
-  if (provider !== "GOOGLE_MAPS_SCRAPER") return;
   const settings = readOrgSettings((await prisma.organization.findUnique({ where: { id: organizationId } }))?.settings);
+  if (provider === "ECONODATA") {
+    const block = await econodataBlock(organizationId, settings);
+    if (block) throw unprocessable(block);
+    return;
+  }
+  if (provider !== "GOOGLE_MAPS_SCRAPER") return;
   if (!settings.discovery.googleMapsEnabled) throw unprocessable("O adaptador do Google Maps está desativado nas configurações.");
   const running = await prisma.searchJob.count({ where: { organizationId, provider: "GOOGLE_MAPS_SCRAPER", status: { in: [...ACTIVE] } } });
   if (running >= 2) throw conflict("Já existem buscas do Google Maps em andamento. Por segurança contra bloqueios, aguarde terminarem.");
@@ -42,8 +57,8 @@ export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
     const list = await Promise.all(
       Object.values(ADAPTERS).map(async (a) => {
         const avail = await a.available();
-        const disabledByOrg = a.id === "GOOGLE_MAPS_SCRAPER" && !settings.discovery.googleMapsEnabled;
-        return { id: a.id, label: a.label, license: a.license, warning: a.warning ?? null, available: avail.ok && !disabledByOrg, reason: disabledByOrg ? "Desativado nas configurações da organização." : (avail.reason ?? null) };
+        const disabledByOrg = a.id === "GOOGLE_MAPS_SCRAPER" && !settings.discovery.googleMapsEnabled ? "Desativado nas configurações da organização." : a.id === "ECONODATA" ? await econodataBlock(orgId(req), settings) : null;
+        return { id: a.id, label: a.label, license: a.license, warning: a.warning ?? null, available: avail.ok && !disabledByOrg, reason: disabledByOrg ?? avail.reason ?? null };
       }),
     );
     return [...list, { id: "CSV_IMPORT", label: "Importação de CSV", license: "Dados fornecidos por você; garanta que o uso e o armazenamento são permitidos.", warning: null, available: true, reason: null }];
@@ -64,6 +79,14 @@ export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
     async (req, reply) => {
       const organizationId = orgId(req);
       await assertCanRun(organizationId, req.body.provider);
+      if (req.body.provider === "ECONODATA") {
+        // blocos pagos por empresa conferidos antes de criar (contatos só se a conta liberou)
+        try {
+          searchBuckets((await dataSettingsOf(organizationId)), econodataOptions(req.body));
+        } catch (err) {
+          throw unprocessable((err as ProviderError).detail ?? (err as Error).message);
+        }
+      }
       const where = [req.body.neighborhood, req.body.city, req.body.state].filter(Boolean).join(", ");
       // limites da conta conferidos e reservados junto com a criação (ver quota.ts)
       const { job, params } = await prisma.$transaction(async (tx) => {
@@ -83,6 +106,19 @@ export const searchRoutes: FastifyPluginAsyncZod = async (app) => {
       await enqueueSearch({ searchJobId: job.id });
       await writeAudit(req, { action: "search.created", entityType: "search_job", entityId: job.id, metadata: { provider: params.provider, keyword: params.keyword, city: params.city, limit: req.body.limit, quotaCap: params.quotaCap ?? null } });
       return reply.code(201).send({ id: job.id, quotaCap: params.quotaCap ?? null });
+    },
+  );
+
+  app.post(
+    "/searches/econodata/preview",
+    { config: { permission: "search:run", rateLimit: { max: 20, timeWindow: "1 minute" } }, schema: { tags: ["search"], summary: "Prévia da busca na Econodata: quantidade de empresas e custo estimado (não traz empresas)", body: searchParamsSchema } },
+    async (req) => {
+      const organizationId = orgId(req);
+      try {
+        return await previewEconodataSearch(organizationId, req.auth!.userId, { ...req.body, limit: applyCap(req.body, (await searchUsage(prisma, organizationId)).companiesRemaining).limit });
+      } catch (err) {
+        throw unprocessable((err as Error).message);
+      }
     },
   );
 

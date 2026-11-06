@@ -12,12 +12,14 @@ Enriquecimento pago com cadastro oficial e estimativas de mercado, integrado à 
 |---|---|---|
 | Identificar a empresa sem CNPJ | `POST /v4/companies/match` (`criterios`: nome, UF, site, telefone, e-mail) | Lista vazia é grátis; só o melhor candidato, quando confiante, é cobrado |
 | Consulta completa | `POST /v4/companies/search` (`criterios.cnpj`, `incluir`) | Base + campos entregues; reconsultar a mesma empresa em 24 h não recobra |
+| Busca de empresas (prospecção) | `POST /v4/companies/search_list` (`filtros`: situação, UF, cidade, CNAE, porte, palavras-chave, com telefone; paginação por cursor) | Base + campos entregues por empresa; quem já veio em 24 h não é recobrado |
+| Quantas empresas a busca acha | `POST /v4/companies/calc_list` (mesmos `filtros`) | A operação diz "gratuito", mas o esquema da resposta fala em base de 100 tokens: o consumo real fica registrado |
 | Saldo | `GET /v4/account/balance` | Nunca cobra |
 | Prévia de custo | header `X-Estimate-Only: true` em qualquer endpoint de dados | Não cobra nem entrega dado |
 
 - **Consumo real:** vem no header `X-Tokens-Charged` e fica registrado em `data_provider_calls`.
 - **Limites do fornecedor:** 60 requisições por minuto por chave (rajada de 120), acima disso 429; saldo insuficiente é 402.
-- **Não usados nesta fase:** `search_list` e `calc_list` (segmentação de mercado), tags, pesquisas salvas, `people` (decisores paginados) e `economic-group`.
+- **Não usados nesta fase:** tags, pesquisas salvas (`search_list_by_id`), `people` (decisores paginados) e `economic-group`.
 
 ## Fluxo
 
@@ -36,6 +38,19 @@ Coleta gratuita → identificação → validação → consulta paga seletiva:
 6. **Repetição:** só para 429 e 503 (respeitando `Retry-After` ou `X-RateLimit-Reset`); 401, 402, 403, 404 e 422 não se repetem.
 7. **Proteções da conta:** trava por empresa (sem consulta duplicada), limite de 50 por minuto por conta, cache pelo número de dias da conta e lote pela fila `company-data` com concorrência de `ECONODATA_MAX_CONCURRENT_REQUESTS` e 20 por minuto.
 8. **Automático:** desligado por padrão. Quando ligado, depois de cada busca pega só as empresas novas com CNPJ ou site, até o limite por busca.
+
+## Busca de empresas na Econodata
+
+A Econodata também é uma **fonte da tela de busca**, ao lado do Google Maps (Encontrar Empresas › Fonte de dados › Econodata). Código em `company-data/search.ts` e `sources/econodata.ts`.
+
+- **Disponível** só na conta com dados empresariais ligados e chave cadastrada (ou no modo simulado). Fora disso, a fonte aparece desativada com o motivo.
+- **Filtros:** palavra-chave (no nome da empresa e/ou em produtos e serviços), cidade, UF (nome ou sigla), CNAE principal (código ou prefixo), porte, só ativas (padrão) e só com telefone. Raio, idioma e "nome contém" valem só para o Google Maps.
+- **Dados por empresa:** o cadastro sempre vem. Porte estimado, perfil do negócio e contatos básicos são opcionais e cada um custa tokens. Contatos só entram com o bloco liberado na conta, e a API recusa a busca antes de criar.
+- **Prévia obrigatória:** antes de buscar, a tela mostra quantas empresas a busca acha (`calc_list`) e o custo estimado da primeira página (`X-Estimate-Only`, sem cobrança). O botão só libera com a prévia dos mesmos filtros e sem bloqueio de limite.
+- **Execução:** na fila de buscas, em páginas de até 200 empresas, até a quantidade escolhida e o limite de empresas da conta. A cada página, os limites da conta (tokens por consulta, consultas e tokens por dia) são conferidos; estourou, a busca para e aproveita o que já foi pago. Cada página fica em `data_provider_calls` (`operation = "search_list"`).
+- **Gravação:** as empresas entram pelo mesmo fluxo do Google Maps (deduplicação, procedência `ECONODATA`, filtros de resultado). A deduplicação agora começa pelo **CNPJ válido**, então repetir a busca não duplica empresas. O perfil já pago de cada empresa vira o dado empresarial da ficha (`identifiedBy = "search_list"`), sem nova consulta.
+- **Cota da plataforma:** buscas na Econodata contam nos limites de pesquisas e de empresas definidos pelo administrador, como as do Google Maps.
+- **Não confirmado no contrato:** o formato exato do nome da cidade no filtro `cidade` (é enviado como digitado), se chaves trial têm o escopo `companies:search_list` e o custo real do `calc_list`. Se a prévia voltar zero para uma cidade que certamente tem empresas, confira a grafia.
 
 ## Modelo interno
 
@@ -78,10 +93,10 @@ Cada campo é um `DataPoint` com valor, natureza, fonte (fornecedor e bloco), da
 ## Modo simulado e testes
 
 - **O que é:** `econodata/mock.ts` implementa o contrato HTTP da v4 com dados sintéticos e determinísticos. Usa o mesmo cliente HTTP, então os testes exercitam o caminho real.
-- **Cenários por palavra no nome ou site:** `ambigua`, `naoencontrada`, `indisponivel` (503), `limite` (429 uma vez), `semprelimite`, `outracidade`, `baixada`.
+- **Cenários por palavra no nome ou site:** `ambigua`, `naoencontrada`, `indisponivel` (503), `limite` (429 uma vez), `semprelimite`, `outracidade`, `baixada`. Na busca por filtros, o total sai da palavra-chave e da cidade, e `nenhuma` devolve zero.
 - **Cenários pela chave:** chave com `invalida` (401) e chave com `semsaldo` (402).
 - **Isolamento:** perfis simulados ficam com `provider = "econodata-mock"`, aparecem como "Simulado" na ficha e nunca se misturam com os reais nem são gravados na empresa.
-- **Testes:** `test/unit/company-data.test.ts` e `test/integration/company-data.test.ts`, que rodam no banco descartável com o modo simulado.
+- **Testes:** `test/unit/company-data.test.ts`, `test/unit/econodata-search.test.ts`, `test/integration/company-data.test.ts` e `test/integration/econodata-search.test.ts`, que rodam no banco descartável com o modo simulado.
 
 ## Para ativar a API real
 

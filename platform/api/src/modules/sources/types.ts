@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SourceType } from "../../lib/prisma.ts";
+import type { BusinessProfile } from "../company-data/types.ts";
 
 /** Empresa descoberta por uma fonte, já mapeada para o modelo interno (sem inventar campos). */
 export type DiscoveredCompany = {
@@ -32,6 +33,8 @@ export type DiscoveredCompany = {
   /** indicadores públicos do perfil (ex.: quantidade de fotos, "reivindicado") */
   publicProfile?: Record<string, unknown> | null;
   raw: Record<string, unknown>;
+  /** perfil empresarial já normalizado, quando a própria fonte é um provedor de dados (Econodata) */
+  businessProfile?: BusinessProfile;
 };
 
 const triState = z.enum(["any", "with", "without"]).default("any");
@@ -51,8 +54,30 @@ export const searchFiltersSchema = z
 
 export type SearchFilters = z.infer<typeof searchFiltersSchema>;
 
+/** Blocos que a busca na Econodata pode trazer por empresa (contatos avançados não existem na segmentação). */
+export const ECONODATA_SEARCH_BUCKETS = ["cadastro", "estrategico", "perfilNegocio", "contatosBasicos"] as const;
+
+/** Filtros próprios da busca na Econodata (segmentação por filtros da API v4). */
+export const econodataSearchSchema = z.object({
+  /** CNAE principal: código completo ou prefixo (ex.: 6821, 6821-8/01) */
+  cnaes: z.array(z.string().trim().regex(/^[A-Z]?-?[\d./-]{2,12}$/i, "CNAE inválido.")).max(20).default([]),
+  /** porte pela classificação do fornecedor */
+  sizes: z.array(z.enum(["INDIVIDUAL", "MICRO", "PEQUENO", "MEDIO", "GRANDE"])).max(5).default([]),
+  /** onde procurar a palavra-chave: nome da empresa e/ou produtos e serviços */
+  keywordScope: z.array(z.enum(["NOME_EMPRESA", "PRODUTOS_SERVICOS"])).min(1).default(["NOME_EMPRESA", "PRODUTOS_SERVICOS"]),
+  onlyWithPhone: z.boolean().default(false),
+  activeOnly: z.boolean().default(true),
+  /** blocos pedidos por empresa (cada um tem custo); contatos só se a conta liberou esse bloco */
+  buckets: z
+    .array(z.enum(ECONODATA_SEARCH_BUCKETS))
+    .min(1)
+    .default(["cadastro"])
+    .refine((b) => b.includes("cadastro"), "O bloco cadastro é obrigatório."),
+});
+export type EconodataSearchOptions = z.infer<typeof econodataSearchSchema>;
+
 export const searchParamsSchema = z.object({
-  provider: z.enum(["OSM_OVERPASS", "GOOGLE_MAPS_SCRAPER"]),
+  provider: z.enum(["OSM_OVERPASS", "GOOGLE_MAPS_SCRAPER", "ECONODATA"]),
   keyword: z.string().trim().min(2, "Informe a palavra-chave ou nicho.").max(120),
   /** nome ou categoria de empresa (opcional, refina por nome) */
   nameContains: z.string().trim().max(120).optional(),
@@ -68,6 +93,8 @@ export const searchParamsSchema = z.object({
   filters: searchFiltersSchema,
   /** salvar como empresas apenas os resultados que atendem aos filtros */
   saveOnlyMatching: z.boolean().default(true),
+  /** só na fonte Econodata */
+  econodata: econodataSearchSchema.optional(),
 });
 
 export type SearchParams = z.infer<typeof searchParamsSchema>;
@@ -91,6 +118,10 @@ export type SearchArea = { lat: number; lon: number; label: string; radiusKm: nu
 
 export type AdapterContext = {
   searchJobId: string;
+  organizationId: string;
+  userId: string | null;
+  /** limite de empresas da conta já aplicado (quota.ts); a fonte paga não deve trazer mais que isso */
+  maxResults: number;
   params: SearchParams;
   progress: (p: ProgressUpdate) => Promise<void>;
   isCancelled: () => Promise<boolean>;
@@ -99,7 +130,7 @@ export type AdapterContext = {
 };
 
 export interface DiscoveryAdapter {
-  readonly id: Extract<SourceType, "OSM_OVERPASS" | "GOOGLE_MAPS_SCRAPER">;
+  readonly id: Extract<SourceType, "OSM_OVERPASS" | "GOOGLE_MAPS_SCRAPER" | "ECONODATA">;
   readonly label: string;
   readonly license: string;
   readonly warning?: string;

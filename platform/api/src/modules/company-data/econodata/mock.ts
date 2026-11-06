@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { fold } from "../../../lib/normalize.ts";
 import { cnpjDigits, formatCnpj, withCheckDigits } from "../cnpj.ts";
+import type { EconodataFilters } from "./client.ts";
 import type { EconodataCompany } from "./normalize.ts";
 
 /**
@@ -17,9 +18,10 @@ import type { EconodataCompany } from "./normalize.ts";
  * - "baixada": CNPJ com situação BAIXADA
  * - chave com "invalida": 401; chave com "semsaldo": 402 nas chamadas pagas
  * - consulta por CNPJ iniciado em "99": 404
+ * - busca por filtros (search_list/calc_list): o total sai das palavras-chave e da cidade; "nenhuma" devolve 0
  */
 
-const BASE_COST = { match: 20, lookup: 10 } as const;
+const BASE_COST = { match: 20, lookup: 10, search: 30 } as const;
 const BUCKET_COST: Record<string, number> = { cadastro: 20, estrategico: 40, perfilNegocio: 30, contatosBasicos: 50, contatosAvancados: 120 };
 
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
@@ -37,6 +39,7 @@ export function syntheticCnpj(seed: string) {
 function cnaeFor(text: string) {
   const t = fold(text);
   if (/imobili|imove/.test(t)) return { codigo: "L-6821-8/01", descricao: "Corretagem na compra e venda e avaliação de imóveis" };
+  if (/padaria|panifica/.test(t)) return { codigo: "C-1091-1/02", descricao: "Fabricação de produtos de panificação industrial" };
   if (/contab|contador/.test(t)) return { codigo: "M-6920-6/01", descricao: "Atividades de contabilidade" };
   if (/advoca|advogad|juridic/.test(t)) return { codigo: "M-6911-7/01", descricao: "Serviços advocatícios" };
   if (/marketing|publicidade|propaganda/.test(t)) return { codigo: "N-7311-4/00", descricao: "Agências de publicidade" };
@@ -116,10 +119,11 @@ export function createEconodataMock() {
     const headers = new Headers(init?.headers);
     const key = (headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
     const estimate = /^(true|1)$/i.test(headers.get("x-estimate-only") ?? "");
-    const body = init?.body ? (JSON.parse(String(init.body)) as { criterios?: Record<string, string>; incluir?: string[] }) : {};
+    const body = init?.body ? (JSON.parse(String(init.body)) as { criterios?: Record<string, string>; incluir?: string[]; filtros?: EconodataFilters; pagina?: { tamanho?: number; cursor?: string | null } }) : {};
     const crit = body.criterios ?? {};
     const buckets = body.incluir ?? [];
-    const text = fold([crit.nome, crit.site, crit.email, key].filter(Boolean).join(" "));
+    const f = body.filtros ?? {};
+    const text = fold([crit.nome, crit.site, crit.email, ...(f.palavrasChave?.incluir ?? []), ...(f.cidade ?? []), key].filter(Boolean).join(" "));
 
     if (!key || fold(key).includes("invalida")) return problem(401, "Unauthorized", "Token ausente ou inválido");
     if (url.pathname === "/v4/account/balance") return json(200, { saldoTokens: fold(key).includes("semsaldo") ? 0 : 50_000 }, { "x-tokens-charged": "0" });
@@ -161,6 +165,37 @@ export function createEconodataMock() {
       const charged = delivered.has(`${cnpj}:${buckets.join(",")}`) ? 0 : cost("lookup", buckets);
       delivered.add(`${cnpj}:${buckets.join(",")}`);
       return json(200, { empresa: company(cnpj, known.get(cnpj) ?? { text }, buckets) }, { "x-tokens-charged": String(charged) });
+    }
+    if (url.pathname === "/v4/companies/search_list" || url.pathname === "/v4/companies/calc_list") {
+      if (!body.filtros) return problem(422, "Validation failed", "filtros é obrigatório");
+      const words = (f.palavrasChave?.incluir ?? []).join(" ").trim();
+      const city = f.cidade?.[0] ?? null;
+      const uf = f.uf?.[0] ?? null;
+      const total = text.includes("nenhuma") ? 0 : 5 + (hashNum(`${fold(words)}|${fold(city ?? "")}|${uf}`) % 36);
+      if (url.pathname.endsWith("calc_list")) return json(200, { totalRegistros: total }, { "x-tokens-charged": "0" });
+      const size = Math.min(200, Math.max(1, body.pagina?.tamanho ?? 50));
+      const perCompany = buckets.reduce((sum, b) => sum + (BUCKET_COST[b] ?? 0), 0) || BUCKET_COST.cadastro!;
+      if (estimate) return json(200, { tokensEstimados: BASE_COST.search + Math.min(size, total) * perCompany }, { "x-tokens-charged": "0" });
+      if (fold(key).includes("semsaldo")) return problem(402, "Payment Required", "Saldo de tokens insuficiente");
+      const offset = Number(Buffer.from(body.pagina?.cursor ?? "", "base64").toString() || 0) || 0;
+      const label = words ? words.replace(/(^|\s)\S/g, (c) => c.toUpperCase()) : "Empresa";
+      let charged = BASE_COST.search;
+      const resultados = [];
+      for (let i = offset; i < Math.min(total, offset + size); i++) {
+        const cnpj = syntheticCnpj(`busca|${fold(words)}|${fold(city ?? "")}|${i}`);
+        const name = `${label} Simulada ${i + 1}`;
+        known.set(cnpj, { name, uf: uf ?? undefined, text });
+        const c = company(cnpj, { name, uf: uf ?? undefined, text }, buckets);
+        if (c.cadastro) {
+          c.cadastro.cidade = city;
+          c.cadastro.endereco = { logradouro: `Rua Simulada, ${i + 1}`, bairro: "Centro", cidade: city, uf, cep: "87500-000" };
+        }
+        if (!delivered.has(`${cnpj}:${buckets.join(",")}`)) charged += perCompany;
+        delivered.add(`${cnpj}:${buckets.join(",")}`);
+        resultados.push(c);
+      }
+      const next = offset + size < total ? Buffer.from(String(offset + size)).toString("base64") : null;
+      return json(200, { totalRegistros: total, pagina: { tamanho: size, cursorProximo: next }, resultados }, { "x-tokens-charged": String(charged) });
     }
     return problem(404, "Not Found", "Caminho inexistente na API simulada");
   };

@@ -1,4 +1,5 @@
 import { env } from "../../config/env.ts";
+import { econodataAdapter } from "../sources/econodata.ts";
 import { gmapsAdapter } from "../sources/gmaps.ts";
 import { overpassAdapter } from "../sources/overpass.ts";
 import type { DiscoveryAdapter } from "../sources/types.ts";
@@ -8,13 +9,19 @@ const ALL: Record<string, DiscoveryAdapter> = {
   OSM_OVERPASS: overpassAdapter,
 };
 
-/** Fontes habilitadas em SEARCH_SOURCES (padrão: só o Google Maps; o OpenStreetMap pode ser reativado por configuração). */
-export const ADAPTERS: Record<string, DiscoveryAdapter> = Object.fromEntries(
-  env.SEARCH_SOURCES.split(",")
-    .map((s) => s.trim())
-    .filter((s) => s in ALL)
-    .map((s) => [s, ALL[s]!]),
-);
+/**
+ * Fontes habilitadas em SEARCH_SOURCES (padrão: só o Google Maps; o OpenStreetMap pode ser reativado por configuração).
+ * A Econodata está sempre listada, mas só fica disponível na conta que ligou os dados empresariais e tem chave.
+ */
+export const ADAPTERS: Record<string, DiscoveryAdapter> = {
+  ...Object.fromEntries(
+    env.SEARCH_SOURCES.split(",")
+      .map((s) => s.trim())
+      .filter((s) => s in ALL)
+      .map((s) => [s, ALL[s]!]),
+  ),
+  ECONODATA: econodataAdapter,
+};
 
 /** Fonte usada para repetir buscas de uma fonte que foi desativada. */
 export const DEFAULT_SOURCE = Object.keys(ADAPTERS)[0] ?? "GOOGLE_MAPS_SCRAPER";

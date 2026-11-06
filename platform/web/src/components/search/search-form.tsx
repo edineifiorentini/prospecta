@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, Gauge, Globe2, Loader2, MapPin, Search, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Building2, Gauge, Globe2, Loader2, MapPin, Search, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
@@ -22,13 +22,14 @@ import { api, ApiError, errorMessage } from "@/lib/api";
 import type { Source } from "@/lib/types";
 import type { MapArea } from "@/components/map/lead-map";
 import { cn } from "@/lib/utils";
+import { EconodataOptions, type EconodataPreview } from "./econodata-options";
 
 const tri = z.enum(["any", "with", "without"]);
 const optNum = z.union([z.number(), z.nan()]).optional().transform((v) => (v === undefined || Number.isNaN(v) ? undefined : v));
 
 const schema = z
   .object({
-    provider: z.enum(["OSM_OVERPASS", "GOOGLE_MAPS_SCRAPER"]),
+    provider: z.enum(["OSM_OVERPASS", "GOOGLE_MAPS_SCRAPER", "ECONODATA"]),
     keyword: z.string().trim().min(2, "Informe a palavra-chave ou nicho."),
     nameContains: z.string().trim().max(120).optional(),
     country: z.string().trim().min(2),
@@ -50,8 +51,44 @@ const schema = z
     }),
     saveOnlyMatching: z.boolean(),
     acceptRisk: z.boolean(),
+    econodata: z.object({
+      cnaesText: z.string().trim().max(300),
+      sizes: z.array(z.enum(["INDIVIDUAL", "MICRO", "PEQUENO", "MEDIO", "GRANDE"])),
+      scopeName: z.boolean(),
+      scopeProducts: z.boolean(),
+      onlyWithPhone: z.boolean(),
+      activeOnly: z.boolean(),
+      buckets: z.array(z.enum(["cadastro", "estrategico", "perfilNegocio", "contatosBasicos"])),
+    }),
   })
-  .refine((v) => v.provider !== "GOOGLE_MAPS_SCRAPER" || v.acceptRisk, { path: ["acceptRisk"], message: "Confirme que leu o aviso para usar esta fonte." });
+  .refine((v) => v.provider !== "GOOGLE_MAPS_SCRAPER" || v.acceptRisk, { path: ["acceptRisk"], message: "Confirme que leu o aviso para usar esta fonte." })
+  .refine((v) => v.provider !== "ECONODATA" || v.econodata.scopeName || v.econodata.scopeProducts, { path: ["econodata", "scopeName"], message: "Escolha onde procurar a palavra-chave." })
+  .refine((v) => v.provider !== "ECONODATA" || cnaeList(v.econodata.cnaesText).every((c) => /^[A-Z]?-?[\d./-]{2,12}$/i.test(c)), { path: ["econodata", "cnaesText"], message: "CNAE inválido: use números, como 6821 ou 6911-7/01." });
+
+type Output = z.output<typeof schema>;
+
+function cnaeList(text: string) {
+  return text.split(/[,;\s]+/).filter(Boolean);
+}
+
+/** Corpo de POST /searches (e da prévia): os filtros da Econodata só vão quando ela é a fonte. */
+function toBody(v: Output) {
+  const { acceptRisk: _a, econodata: e, ...body } = v;
+  const base = { ...body, nameContains: body.nameContains || undefined, state: body.state || undefined, neighborhood: body.neighborhood || undefined };
+  if (v.provider !== "ECONODATA") return base;
+  return {
+    ...base,
+    nameContains: undefined,
+    econodata: {
+      cnaes: cnaeList(e.cnaesText),
+      sizes: e.sizes,
+      keywordScope: [...(e.scopeName ? ["NOME_EMPRESA"] : []), ...(e.scopeProducts ? ["PRODUTOS_SERVICOS"] : [])],
+      onlyWithPhone: e.onlyWithPhone,
+      activeOnly: e.activeOnly,
+      buckets: [...new Set(["cadastro", ...e.buckets])],
+    },
+  };
+}
 
 type Values = z.input<typeof schema>;
 
@@ -103,6 +140,7 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
       filters: { website: "any", phone: "any", email: "any" },
       saveOnlyMatching: true,
       acceptRisk: false,
+      econodata: { cnaesText: "", sizes: [], scopeName: true, scopeProducts: true, onlyWithPhone: false, activeOnly: true, buckets: ["cadastro"] },
     },
   });
   // o aceite do aviso fica lembrado neste navegador (o aviso continua visível); lido após montar para não divergir do HTML do servidor
@@ -149,13 +187,7 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
   }, [onAreaChange, geo, geoKey, geoWarning, radiusKm]);
 
   const create = useMutation({
-    mutationFn: (v: z.output<typeof schema>) => {
-      const { acceptRisk: _a, ...body } = v;
-      return api<{ id: string; quotaCap: number | null }>("/searches", {
-        method: "POST",
-        body: { ...body, nameContains: body.nameContains || undefined, state: body.state || undefined, neighborhood: body.neighborhood || undefined },
-      });
-    },
+    mutationFn: (v: Output) => api<{ id: string; quotaCap: number | null }>("/searches", { method: "POST", body: toBody(v) }),
     onSuccess: (res) => {
       toast.success("Busca criada", { description: res.quotaCap ? `Pelo limite da conta, esta pesquisa traz no máximo ${res.quotaCap} empresas.` : "Acompanhe o andamento em tempo real." });
       qc.invalidateQueries({ queryKey: ["searches"] });
@@ -172,12 +204,40 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
   const hasLimits = !!q && (q.searchesPerDay != null || q.maxCompanies != null);
   const willCap = q?.companiesRemaining != null && q.companiesRemaining > 0 && limit > q.companiesRemaining ? q.companiesRemaining : null;
 
+  // Econodata: a prévia (contagem + custo) precisa ser dos mesmos filtros que vão ser buscados
+  const watched = useWatch({ control: form.control });
+  const parsedNow = provider === "ECONODATA" ? schema.safeParse(watched) : null;
+  const currentKey = parsedNow?.success ? JSON.stringify(toBody(parsedNow.data)) : null;
+  const [preview, setPreview] = useState<{ key: string; data: EconodataPreview } | null>(null);
+  const previewStale = !preview || preview.key !== currentKey;
+  const runPreview = useMutation({
+    mutationFn: (v: Output) => {
+      const body = toBody(v);
+      return api<EconodataPreview>("/searches/econodata/preview", { method: "POST", body }).then((data) => ({ key: JSON.stringify(body), data }));
+    },
+    onSuccess: setPreview,
+    onError: (e) => toast.error("Não foi possível calcular a prévia", { description: errorMessage(e) }),
+  });
+  const businessSettings = useQuery({
+    queryKey: ["business-data-settings"],
+    queryFn: () => api<{ settings: { buckets: string[] } }>("/business-data/settings"),
+    enabled: provider === "ECONODATA",
+  });
+  const econodataReady = provider !== "ECONODATA" || (!previewStale && !!preview && preview.data.willFetch > 0 && !preview.data.blocked);
+
   const onSubmit = form.handleSubmit((v) => create.mutate(schema.parse(v)));
+  const onPreview = form.handleSubmit((v) => runPreview.mutate(schema.parse(v)));
   const errors = form.formState.errors;
   const gmaps = sources.data?.find((s) => s.id === "GOOGLE_MAPS_SCRAPER");
   const osm = sources.data?.find((s) => s.id === "OSM_OVERPASS");
-  // com uma só fonte habilitada (padrão: Google Maps), não há o que escolher
-  const choose = !!gmaps && !!osm;
+  const econ = sources.data?.find((s) => s.id === "ECONODATA");
+  // com uma só fonte habilitada, não há o que escolher
+  const options = [
+    { id: "OSM_OVERPASS" as const, icon: Globe2, title: "OpenStreetMap", desc: "Dados abertos (ODbL). Recomendado.", src: osm },
+    { id: "GOOGLE_MAPS_SCRAPER" as const, icon: MapPin, title: "Google Maps", desc: "Motor local gosom. Use com moderação.", src: gmaps },
+    { id: "ECONODATA" as const, icon: Building2, title: "Econodata", desc: "Base de empresas com CNPJ. Consome tokens.", src: econ },
+  ].filter((o) => !!o.src);
+  const choose = options.length > 1;
 
   return (
     <form onSubmit={onSubmit} className="grid gap-5" noValidate>
@@ -189,11 +249,8 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
           control={form.control}
           name="provider"
           render={({ field }) => (
-            <div className="grid gap-2 sm:grid-cols-2" role="radiogroup">
-              {[
-                { id: "OSM_OVERPASS" as const, icon: Globe2, title: "OpenStreetMap", desc: "Dados abertos (ODbL). Recomendado.", src: osm },
-                { id: "GOOGLE_MAPS_SCRAPER" as const, icon: MapPin, title: "Google Maps (opcional)", desc: "Motor local gosom. Use com moderação.", src: gmaps },
-              ].map((opt) => {
+            <div className={cn("grid gap-2", options.length > 2 ? "sm:grid-cols-3" : "sm:grid-cols-2")} role="radiogroup">
+              {options.map((opt) => {
                 const active = field.value === opt.id;
                 const disabled = opt.src ? !opt.src.available : false;
                 return (
@@ -271,9 +328,11 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
         <Field id="keyword" label="Palavra-chave ou nicho" hint="Ex.: dentista, academia, contabilidade" error={errors.keyword?.message}>
           <Input id="keyword" placeholder="dentista" autoFocus {...form.register("keyword")} />
         </Field>
-        <Field id="nameContains" label="Nome ou categoria contém" optional hint="Refina pelo nome da empresa">
-          <Input id="nameContains" placeholder="ex.: odonto" {...form.register("nameContains")} />
-        </Field>
+        {provider !== "ECONODATA" && (
+          <Field id="nameContains" label="Nome ou categoria contém" optional hint="Refina pelo nome da empresa">
+            <Input id="nameContains" placeholder="ex.: odonto" {...form.register("nameContains")} />
+          </Field>
+        )}
       </div>
 
       {/* Onde */}
@@ -296,7 +355,8 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
         {geoWarning ?? (geo ? `${geo.label} · ${geo.latitude.toFixed(4)}, ${geo.longitude.toFixed(4)}` : city ? "Localizando…" : "Informe a cidade para localizar a área de busca.")}
       </p>
 
-      <div className="grid gap-5 sm:grid-cols-3">
+      <div className={cn("grid gap-5", provider === "ECONODATA" ? "sm:max-w-xs" : "sm:grid-cols-3")}>
+        {provider !== "ECONODATA" && (
         <Controller
           control={form.control}
           name="radiusKm"
@@ -310,6 +370,7 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
             </div>
           )}
         />
+        )}
         <Controller
           control={form.control}
           name="limit"
@@ -330,6 +391,7 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
             </Field>
           )}
         />
+        {provider !== "ECONODATA" && (
         <Controller
           control={form.control}
           name="lang"
@@ -348,7 +410,23 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
             </Field>
           )}
         />
+        )}
       </div>
+
+      {provider === "ECONODATA" && (
+        <>
+          <EconodataOptions
+            control={form.control}
+            register={form.register}
+            allowedBuckets={businessSettings.data?.settings.buckets ?? ["cadastro"]}
+            preview={preview?.data ?? null}
+            stale={previewStale}
+            pending={runPreview.isPending}
+            onPreview={onPreview}
+          />
+          {(errors.econodata?.scopeName || errors.econodata?.cnaesText) && <p className="-mt-2 text-xs text-destructive">{errors.econodata?.scopeName?.message ?? errors.econodata?.cnaesText?.message}</p>}
+        </>
+      )}
 
       {provider === "GOOGLE_MAPS_SCRAPER" && (
         <label className="flex items-center justify-between gap-4 rounded-xl border bg-card px-4 py-3">
@@ -420,10 +498,10 @@ export function SearchForm({ onAreaChange }: { onAreaChange?: (preview: AreaPrev
       )}
 
       <div className="flex items-center justify-end gap-3">
-        <span className="text-xs text-muted-foreground">As buscas rodam em fila, uma por vez.</span>
-        <Button type="submit" size="lg" disabled={create.isPending || !!blocked}>
+        <span className="text-xs text-muted-foreground">{provider === "ECONODATA" && !econodataReady ? "Calcule a prévia de quantidade e custo para liberar a busca." : "As buscas rodam em fila, uma por vez."}</span>
+        <Button type="submit" size="lg" disabled={create.isPending || !!blocked || !econodataReady}>
           {create.isPending ? <Loader2 className="animate-spin" /> : <Search />}
-          Pesquisar
+          {provider === "ECONODATA" ? "Buscar na Econodata" : "Pesquisar"}
         </Button>
       </div>
     </form>

@@ -75,7 +75,7 @@ export async function usageToday(organizationId: string) {
   return { requests: agg._count, tokens: agg._sum.tokensCharged ?? 0, since };
 }
 
-type Usage = Awaited<ReturnType<typeof usageToday>>;
+export type Usage = Awaited<ReturnType<typeof usageToday>>;
 
 /** Motivo para NÃO fazer a chamada paga, ou null se está dentro dos limites da conta. */
 export function limitReason(s: DataEnrichmentSettings, usage: Usage, estimated: number | null): string | null {
@@ -95,10 +95,10 @@ async function rateLimit(organizationId: string) {
   if (n > RATE_PER_MINUTE) throw new ProviderError("RATE_LIMIT", "Limite por minuto desta conta atingido.", null, (minute + 1) * 60_000 - Date.now());
 }
 
-type Ctx = { organizationId: string; companyId: string | null; userId: string | null; provider: string };
+export type Ctx = { organizationId: string; companyId: string | null; userId: string | null; provider: string };
 
 /** Chamada ao fornecedor com ritmo controlado, novas tentativas para erros temporários e registro de consumo. */
-async function call<T>(ctx: Ctx, operation: "match" | "lookup" | "balance", estimateOnly: boolean, fn: () => Promise<CallResult<T>>): Promise<CallResult<T>> {
+export async function call<T>(ctx: Ctx, operation: "match" | "lookup" | "balance" | "search_list" | "calc_list", estimateOnly: boolean, fn: () => Promise<CallResult<T>>): Promise<CallResult<T>> {
   await rateLimit(ctx.organizationId);
   const started = Date.now();
   const base = { organizationId: ctx.organizationId, companyId: ctx.companyId, requestedById: ctx.userId, provider: ctx.provider, operation, estimateOnly };
@@ -324,6 +324,18 @@ async function writeBack(organizationId: string, c: Awaited<ReturnType<typeof lo
     ...(p.address?.value.city ? [{ organizationId, companyId: c.id, field: "city", value: p.address.value.city, source: "ECONODATA" as const, sourceRef: "Econodata · cadastro", status: "VERIFIED" as const, confidence: conf }] : []),
   ];
   await prisma.$transaction([...(Object.keys(data).length ? [prisma.company.update({ where: { id: c.id }, data })] : []), prisma.companyFieldSource.createMany({ data: sources })]);
+}
+
+/**
+ * Perfil que veio junto com a empresa numa busca na Econodata (já pago): vira o dado empresarial da ficha, sem
+ * consultar de novo. Um perfil já confirmado e mais completo da mesma empresa não é trocado por um menor.
+ */
+export async function saveSearchProfile(organizationId: string, companyId: string, profile: BusinessProfile) {
+  const where = { organizationId_companyId_provider: { organizationId, companyId, provider: profile.provider } };
+  const existing = await prisma.companyDataProfile.findUnique({ where, select: { status: true, buckets: true } });
+  if (existing?.status === "MATCHED" && existing.buckets.length > profile.buckets.length) return;
+  const data = { status: "MATCHED", cnpj: profile.cnpj, matchConfidence: 1, matchedBy: ["cnpj"], identifiedBy: "search_list", profile: profile as unknown as Prisma.InputJsonValue, candidates: [], warnings: [], buckets: profile.buckets, tokensCharged: 0, errorCode: null, error: null, fetchedAt: new Date(profile.fetchedAt) };
+  await prisma.companyDataProfile.upsert({ where, create: { organizationId, companyId, provider: profile.provider, ...data }, update: data });
 }
 
 /** Saldo de tokens no fornecedor (consulta gratuita). */
