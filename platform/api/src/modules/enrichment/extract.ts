@@ -1,5 +1,6 @@
 import { load, type CheerioAPI } from "cheerio";
 import { hostOf, normalizeEmail, normalizePhone, uniq } from "../../lib/normalize.ts";
+import { detectTechnologies, type Technology } from "../audit/technologies.ts";
 import { parseSocialUrl, type ParsedSocial } from "./social.ts";
 
 export type PageExtraction = {
@@ -27,6 +28,8 @@ export type PageExtraction = {
   wordCount: number;
   textSnippet: string;
   generator: string | null;
+  /** tecnologias detectadas no HTML (presença; não detectar não prova ausência) */
+  technologies?: Technology[];
 };
 
 const EMAIL_IN_TEXT = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
@@ -217,6 +220,7 @@ export function extractPage(html: string, pageUrl: string): PageExtraction {
     wordCount: text ? text.split(" ").length : 0,
     textSnippet: paragraphs.slice(0, 3).join(" ").slice(0, 600),
     generator: $('meta[name="generator"]').attr("content")?.slice(0, 80) ?? null,
+    technologies: detectTechnologies(html),
   };
 }
 

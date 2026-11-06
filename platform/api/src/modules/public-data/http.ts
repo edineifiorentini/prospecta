@@ -1,4 +1,5 @@
 import { env, isProd } from "../../config/env.ts";
+import { AppError } from "../../lib/errors.ts";
 import { prisma } from "../../lib/prisma.ts";
 import { redis } from "../../lib/redis.ts";
 import { redactSecrets } from "../ai/errors.ts";
@@ -188,7 +189,9 @@ export async function tracked<T>(ctx: RunContext, fn: () => Promise<{ value: T; 
 }
 
 /** Erro de fonte → resposta HTTP da API do Prospecta (mensagem compreensível, sem segredo). */
-export function sourceHttpError(err: SourceError) {
-  const status = err.code === "DISABLED" || err.code === "NOT_CONFIGURED" ? 400 : err.code === "RATE_LIMIT" || err.code === "LIMIT_EXCEEDED" ? 429 : err.code === "NOT_FOUND" ? 404 : err.code === "BLOCKED" || err.code === "INVALID_REQUEST" ? 422 : 502;
-  return Object.assign(new Error(err.message), { statusCode: status, code: err.code, detail: err.detail });
+export function sourceHttpError(err: unknown) {
+  if (!(err instanceof SourceError)) return err;
+  const status = err.code === "DISABLED" || err.code === "NOT_CONFIGURED" || err.code === "AUTH" ? 400 : err.code === "RATE_LIMIT" || err.code === "LIMIT_EXCEEDED" ? 429 : err.code === "NOT_FOUND" ? 404 : err.code === "BLOCKED" || err.code === "INVALID_REQUEST" ? 422 : 502;
+  // a mensagem da fonte (detail) já passou por redactSecrets
+  return new AppError(status, err.code, err.code === "INVALID_REQUEST" && err.detail ? err.detail : err.message, err.detail ? { detail: err.detail } : undefined);
 }

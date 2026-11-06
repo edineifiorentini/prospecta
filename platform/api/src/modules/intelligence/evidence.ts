@@ -147,7 +147,7 @@ export function collectFacts(c: CompanySnapshot): CompanyFacts {
   const googleAt = iso(c.collectedAt);
 
   const b = c.business ?? null;
-  const bizSource = b?.simulated ? "ECONODATA_SIMULATED" : "ECONODATA";
+  const bizSource = b?.provider === "receita-aberta" ? "RECEITA_DADOS_ABERTOS" : b?.simulated ? "ECONODATA_SIMULATED" : "ECONODATA";
 
   // ── Segmento ──
   const segment = detectSegment({ ...c, cnae: b?.primaryCnae?.code ?? null });

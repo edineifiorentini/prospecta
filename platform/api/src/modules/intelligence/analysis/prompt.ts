@@ -63,7 +63,7 @@ export function buildPrompt(input: { company: CompanySnapshot; facts: CompanyFac
     // dados empresariais estruturados (cadastro oficial e estimativas do fornecedor), sem contatos nem pessoas
     dados_empresariais: c.business
       ? {
-          fonte: c.business.simulated ? "Econodata (SIMULADO: não representa a empresa real)" : "Econodata",
+          fonte: c.business.provider === "receita-aberta" ? "Receita Federal (dados abertos)" : c.business.simulated ? "Econodata (SIMULADO: não representa a empresa real)" : "Econodata",
           situacao_cnpj: c.business.registrationStatus,
           abertura: c.business.openedAt,
           cnae_principal: c.business.primaryCnae ? untrusted(`${c.business.primaryCnae.code ?? ""} ${c.business.primaryCnae.description ?? ""}`, 160) : null,

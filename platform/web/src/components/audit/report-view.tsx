@@ -2,6 +2,7 @@
 
 import { AlertTriangle, CheckCircle2, CircleDashed, ExternalLink, Lightbulb, MinusCircle, ShoppingBag, XCircle } from "lucide-react";
 import { SectionCard } from "@/components/page";
+import { DiagnosticsCard, type Diagnostics } from "./diagnostics-card";
 import { ScorePill } from "@/components/score-pill";
 import { StatusBadge } from "@/components/status-badge";
 import { SCORE_LABEL } from "@/lib/labels";
@@ -19,7 +20,9 @@ export type AuditDetail = {
   problems: { key: string; label: string; detail: string | null; url: string | null; severity: "alta" | "média" | "baixa"; dimension: string }[];
   recommendations: { key: string; title: string; action: string; impact: string; priority: number; evidence: string | null; url: string | null }[];
   services: { key: string; name: string; reason: string }[];
-  lighthouse: { performance: number | null; accessibility: number | null; bestPractices: number | null; seo: number | null; lcpMs: number | null } | null;
+  lighthouse: { performance: number | null; accessibility: number | null; bestPractices: number | null; seo: number | null; lcpMs: number | null; source?: "local" | "pagespeed" } | null;
+  /** diagnóstico técnico complementar (auditorias feitas depois de 11/2026) */
+  diagnostics?: Diagnostics | null;
   error: string | null;
   createdAt: string;
   finishedAt: string | null;
@@ -67,11 +70,12 @@ export function ReportBody({ audit, compact }: { audit: AuditDetail; compact?: b
         <p className="text-sm leading-relaxed text-pretty">{audit.summary}</p>
         {lh && (
           <p className="mt-3 text-xs text-muted-foreground">
-            Lighthouse (celular): desempenho {pct(lh.performance)} · acessibilidade {pct(lh.accessibility)} · boas práticas {pct(lh.bestPractices)} · SEO {pct(lh.seo)}
+            {lh.source === "pagespeed" ? "PageSpeed Insights" : "Lighthouse"} (celular): desempenho {pct(lh.performance)} · acessibilidade {pct(lh.accessibility)} · boas práticas {pct(lh.bestPractices)} · SEO {pct(lh.seo)}
             {lh.lcpMs ? ` · LCP ${(lh.lcpMs / 1000).toFixed(1)} s` : ""}
           </p>
         )}
       </SectionCard>
+      {audit.diagnostics && <DiagnosticsCard d={audit.diagnostics} />}
       <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard title="Problemas encontrados" description="Somente itens com evidência coletada." bodyClassName="p-0">
           {!audit.problems.length ? (

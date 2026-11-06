@@ -193,7 +193,9 @@ describe("três indicadores", () => {
   });
 
   it("todos os critérios têm rótulo e peso padrão", () => {
-    for (const c of INTELLIGENCE_CRITERIA) expect(c.weight).toBeGreaterThan(0);
+    // critérios opcionais têm peso 0: só existem quando a conta ou uma oferta dá peso a eles
+    for (const c of INTELLIGENCE_CRITERIA.filter((x) => !x.optIn)) expect(c.weight).toBeGreaterThan(0);
+    expect(INTELLIGENCE_CRITERIA.filter((c) => c.optIn).map((c) => c.key)).toEqual(["opp.site_gaps", "opp.no_website"]);
     // os critérios básicos somam 100 por indicador; os de dados empresariais são acréscimo (só com perfil)
     const total = (id: string) => INTELLIGENCE_CRITERIA.filter((c) => c.indicator === id && !c.requires).reduce((a, c) => a + c.weight, 0);
     expect([total("FIT"), total("OPPORTUNITY"), total("RELIABILITY")]).toEqual([100, 100, 100]);

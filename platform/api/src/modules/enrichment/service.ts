@@ -7,6 +7,7 @@ import { nameSimilarity, nameTokens } from "../companies/dedupe.ts";
 import { crawlWebsite, type CrawlResult } from "./crawler.ts";
 import { blockedForCollection } from "../privacy/suppression.ts";
 import { checkMx, checkSocialLink, lookupCnpj } from "./verify.ts";
+import { orgIntegration } from "../public-data/http.ts";
 
 const AGENCY_CREDIT = /(desenvolvid|criad[oa] por|feito por|ag[eê]ncia|design(ed)? by|powered by|site por|by\s)/i;
 
@@ -195,7 +196,8 @@ export async function processEnrichmentJob(job: Job<EnrichmentJobData>) {
     const patch: Prisma.CompanyUpdateInput = {};
     let cnpjInfo = null;
     if (agg.cnpjs.length) {
-      cnpjInfo = await lookupCnpj(agg.cnpjs[0]!);
+      // a conta pode desligar a consulta à BrasilAPI (Configurações › Integrações): o CNPJ fica como encontrado
+      if ((await orgIntegration(company.organizationId, "brasilapi")).enabled) cnpjInfo = await lookupCnpj(agg.cnpjs[0]!);
       if (cnpjInfo) {
         if (!company.cnpj) patch.cnpj = cnpjInfo.cnpj;
         if (!company.legalName && cnpjInfo.razaoSocial) patch.legalName = cnpjInfo.razaoSocial;

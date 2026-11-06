@@ -11,6 +11,7 @@ Ela fica no diretório `platform/` deste fork do **Google Maps Scraper Kit**. O 
 - Metodologia das pontuações: [docs/METODOLOGIA-PONTUACAO.md](docs/METODOLOGIA-PONTUACAO.md)
 - Inteligência comercial e Análise Comercial com IA: [docs/INTELIGENCIA-COMERCIAL.md](docs/INTELIGENCIA-COMERCIAL.md)
 - Dados empresariais pagos (Econodata API v4): [docs/DADOS-EMPRESARIAIS.md](docs/DADOS-EMPRESARIAIS.md)
+- Fontes públicas e gratuitas (IBGE, PNCP, Portal da Transparência, Comex Stat, CAGED, CVM, Receita, PageSpeed): [docs/FONTES-PUBLICAS.md](docs/FONTES-PUBLICAS.md)
 - Relatório das fases: [docs/fases/](docs/fases/)
 
 ## Requisitos

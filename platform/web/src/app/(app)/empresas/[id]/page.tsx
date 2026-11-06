@@ -24,6 +24,7 @@ import { NotesPanel } from "@/components/company/notes-panel";
 import { CrmCard, ScoresCard, TagsCard } from "@/components/company/side-cards";
 import { CompanyAuditPanel } from "@/components/audit/company-audit-panel";
 import { CompanyIntelligencePanel } from "@/components/company/intelligence-panel";
+import { RegionalPanel } from "@/components/company/public-data-cards";
 import { CompanyConversations } from "@/components/messaging/company-conversations";
 import { TaskComposer, TaskList } from "@/components/tasks/task-list";
 import type { CompanyDetail } from "@/components/company/types";
@@ -32,7 +33,7 @@ import { fmtDateTime, fmtMoney, fmtNumber, fmtRating } from "@/lib/format";
 import { LeadMap } from "@/components/map/lead-map";
 import { useSession } from "@/lib/session";
 
-const TABS = ["visao-geral", "inteligencia", "atividades", "tarefas", "anotacoes", "negociacoes", "auditoria", "conversas"] as const;
+const TABS = ["visao-geral", "inteligencia", "regional", "atividades", "tarefas", "anotacoes", "negociacoes", "auditoria", "conversas"] as const;
 
 export default function CompanyPage() {
   const { id } = useParams<{ id: string }>();
@@ -182,6 +183,7 @@ export default function CompanyPage() {
           <TabsList className="mb-4 flex-wrap">
             <TabsTrigger value="visao-geral">Visão geral</TabsTrigger>
             <TabsTrigger value="inteligencia">Inteligência comercial</TabsTrigger>
+            <TabsTrigger value="regional">Indicadores regionais</TabsTrigger>
             <TabsTrigger value="atividades">Atividades</TabsTrigger>
             <TabsTrigger value="tarefas">Tarefas</TabsTrigger>
             <TabsTrigger value="anotacoes">Anotações</TabsTrigger>
@@ -295,6 +297,10 @@ export default function CompanyPage() {
 
           <TabsContent value="inteligencia">
             <CompanyIntelligencePanel companyId={c.id} />
+          </TabsContent>
+
+          <TabsContent value="regional">
+            <RegionalPanel companyId={c.id} />
           </TabsContent>
 
           <TabsContent value="auditoria">

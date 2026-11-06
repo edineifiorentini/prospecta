@@ -5,8 +5,12 @@ import type { AuditJobData } from "../../queues/index.ts";
 import { crawlWebsite, type CrawlResult } from "../enrichment/crawler.ts";
 import { processEnrichmentJob } from "../enrichment/service.ts";
 import { readOrgSettings } from "../orgs/settings.ts";
-import { evaluate, type AuditContext } from "./evaluate.ts";
+import { integrationConfig, SourceError } from "../public-data/http.ts";
+import { buildDiagnostics, type Diagnostics } from "./diagnostics.ts";
+import { evaluate, type AuditContext, type LighthouseSummary } from "./evaluate.ts";
 import { checkInternalLinks, runLighthouse } from "./lighthouse.ts";
+import { asLighthouse, runPageSpeed } from "./pagespeed.ts";
+import { checkTls, type TlsInfo } from "./tls.ts";
 import { buildReport } from "./report.ts";
 import { CRITERIA, METHODOLOGY_VERSION, computeScores, effectiveWeights } from "./scoring.ts";
 
@@ -54,21 +58,41 @@ export async function processAuditJob(job: Job<AuditJobData>) {
       company = await loadContext(audit.companyId);
     }
 
+    const org = await prisma.organization.findUnique({ where: { id: company.organizationId }, select: { settings: true } });
+    const lighthouseCfg = integrationConfig(org?.settings, "lighthouse");
+    const pagespeedCfg = integrationConfig(org?.settings, "pagespeed");
     let crawl: CrawlResult | null = null;
-    let lighthouse = null;
+    let lighthouse: LighthouseSummary | null = null;
     let brokenLinks = null;
+    let tls: TlsInfo | null = null;
+    const pagespeed: Diagnostics["pagespeed"] = { enabled: pagespeedCfg.enabled, mobile: null, desktop: null, error: null };
     if (company.website && company.domain) {
       crawl = await crawlWebsite(company.website, { maxPages: 6 });
       if (crawl.reachable && crawl.robots.allowedHome && crawl.finalUrl) {
-        lighthouse = await runLighthouse(crawl.finalUrl);
+        if (lighthouseCfg.enabled) lighthouse = await runLighthouse(crawl.finalUrl);
+        if (pagespeedCfg.enabled) {
+          for (const strategy of ["mobile", "desktop"] as const) {
+            try {
+              pagespeed[strategy] = await runPageSpeed(company.organizationId, company.id, crawl.finalUrl, strategy, pagespeedCfg.maxDailyRequests);
+            } catch (err) {
+              // falha do PageSpeed vai para o diagnóstico; a auditoria segue com o resto
+              const e = err instanceof SourceError ? err : new SourceError("UNAVAILABLE");
+              pagespeed.error = { code: e.code, message: e.message };
+              if (["NOT_CONFIGURED", "AUTH", "LIMIT_EXCEEDED", "BLOCKED"].includes(e.code)) break;
+            }
+          }
+          // sem Chromium no servidor, o laboratório do PageSpeed (celular) ocupa o lugar do Lighthouse local
+          if (!lighthouse && pagespeed.mobile) lighthouse = asLighthouse(pagespeed.mobile);
+        }
         const links = crawl.pages.flatMap((p) => p.internalLinks.map((l) => l.url)).filter((u) => !crawl!.pages.some((p) => p.finalUrl === u) && crawl!.robotsAllows(u));
         brokenLinks = await checkInternalLinks(links, 15);
       }
+      if (crawl.reachable) tls = await checkTls(crawl.finalUrl?.startsWith("https:") ? crawl.finalUrl : `https://${company.domain}/`);
     }
 
     const ctx: AuditContext = { company, crawl, lighthouse, brokenLinks, now: new Date() };
     const evals = evaluate(ctx);
-    const org = await prisma.organization.findUnique({ where: { id: company.organizationId }, select: { settings: true } });
+    const diagnostics = buildDiagnostics({ crawl, tls, lighthouse, pagespeed });
     const weights = effectiveWeights(readOrgSettings(org?.settings).scoring);
     const scores = computeScores(evals, weights);
     const report = buildReport(company.name, evals, scores);
@@ -106,6 +130,7 @@ export async function processAuditJob(job: Job<AuditJobData>) {
           recommendations: report.recommendations as unknown as Prisma.InputJsonValue,
           services: report.services as unknown as Prisma.InputJsonValue,
           lighthouse: (lighthouse ?? undefined) as Prisma.InputJsonValue | undefined,
+          diagnostics: diagnostics as unknown as Prisma.InputJsonValue,
         },
       }),
       ...KINDS.map((kind) =>

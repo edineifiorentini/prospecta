@@ -17,6 +17,7 @@ import { useSession } from "@/lib/session";
 import { useSyncedState } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { BusinessDataCard } from "./business-data-card";
+import { CvmCard, OffersCard, PublicRecordsCard, ReceitaCard } from "./public-data-cards";
 
 // ── Tipos devolvidos pela API (modules/intelligence) ──
 type Result = "MET" | "PARTIAL" | "NOT_MET" | "NOT_EVALUATED";
@@ -79,7 +80,7 @@ const RESULT_ICON: Record<Result, { icon: typeof Check; tone: string; label: str
   NOT_EVALUATED: { icon: CircleDashed, tone: "text-muted-foreground/70", label: "Não avaliado" },
 };
 const PHONE_KIND = { MOBILE: "Celular", FIXED: "Fixo", TOLL_FREE: "0800", UNKNOWN: "Não identificado" } as const;
-const SOURCE: Record<string, string> = { GOOGLE_MAPS_SCRAPER: "Google Maps", WEBSITE: "Site oficial", MANUAL: "Manual", CSV_IMPORT: "Importação", OSM_OVERPASS: "OpenStreetMap", BRASILAPI_CNPJ: "BrasilAPI", ECONODATA: "Econodata", ECONODATA_SIMULATED: "Econodata (simulado)", SYSTEM: "Prospecta" };
+const SOURCE: Record<string, string> = { GOOGLE_MAPS_SCRAPER: "Google Maps", WEBSITE: "Site oficial", MANUAL: "Manual", CSV_IMPORT: "Importação", OSM_OVERPASS: "OpenStreetMap", BRASILAPI_CNPJ: "BrasilAPI", ECONODATA: "Econodata", ECONODATA_SIMULATED: "Econodata (simulado)", RECEITA_DADOS_ABERTOS: "Receita Federal (dados abertos)", SYSTEM: "Prospecta" };
 const NEXT_ACTION: Record<string, string> = {
   VERIFY_DECISION_MAKER: "Verificar o responsável comercial",
   QUALIFY_OPERATION: "Qualificar a operação de atendimento",
@@ -101,6 +102,10 @@ export function CompanyIntelligencePanel({ companyId }: { companyId: string }) {
     <div className="grid gap-6">
       <PriorityCard data={d} />
       <BusinessDataCard companyId={companyId} />
+      <ReceitaCard companyId={companyId} />
+      <OffersCard companyId={companyId} />
+      <PublicRecordsCard companyId={companyId} />
+      <CvmCard companyId={companyId} />
       <div className="grid gap-6 lg:grid-cols-2">
         <EvidenceCard evidence={d.evidence} />
         <QualityCard data={d} />

@@ -15,6 +15,8 @@ import { WhatsappSettings } from "@/components/settings/whatsapp";
 import { PrivacySettings } from "@/components/settings/privacy";
 import { AiSettingsPanel } from "@/components/settings/ai";
 import { BusinessDataSettings } from "@/components/settings/business-data";
+import { IntegrationsSettings } from "@/components/settings/integrations";
+import { OffersSettings } from "@/components/settings/offers";
 import { useSession } from "@/lib/session";
 
 function SettingsTabs() {
@@ -33,6 +35,8 @@ function SettingsTabs() {
           <TabsTrigger value="pontuacao">Pontuação</TabsTrigger>
           <TabsTrigger value="ia">Inteligência artificial</TabsTrigger>
           <TabsTrigger value="dados">Dados empresariais</TabsTrigger>
+          <TabsTrigger value="integracoes">Integrações</TabsTrigger>
+          <TabsTrigger value="ofertas">Ofertas</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
           {can("privacy:manage") && <TabsTrigger value="privacidade">Privacidade (LGPD)</TabsTrigger>}
           {can("auditlog:read") && <TabsTrigger value="auditoria">Trilha de auditoria</TabsTrigger>}
@@ -61,6 +65,12 @@ function SettingsTabs() {
       </TabsContent>
       <TabsContent value="dados">
         <BusinessDataSettings />
+      </TabsContent>
+      <TabsContent value="integracoes">
+        <IntegrationsSettings />
+      </TabsContent>
+      <TabsContent value="ofertas">
+        <OffersSettings />
       </TabsContent>
       <TabsContent value="whatsapp">
         <WhatsappSettings />

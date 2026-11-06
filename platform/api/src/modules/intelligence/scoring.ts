@@ -19,7 +19,8 @@ export const INTELLIGENCE_METHODOLOGY = "2026.11-ic2";
 export type IndicatorId = "FIT" | "OPPORTUNITY" | "RELIABILITY";
 export type CriterionResult = "MET" | "PARTIAL" | "NOT_MET" | "NOT_EVALUATED";
 
-export type CriterionDef = { key: string; indicator: IndicatorId; label: string; weight: number; requires?: "business" };
+/** `optIn`: critério que só existe quando a configuração (da conta ou de uma oferta) dá peso a ele. */
+export type CriterionDef = { key: string; indicator: IndicatorId; label: string; weight: number; requires?: "business"; optIn?: true };
 
 export const INTELLIGENCE_CRITERIA: CriterionDef[] = [
   { key: "fit.segment", indicator: "FIT", label: "Segmento dentro do perfil de cliente ideal", weight: 30 },
@@ -35,6 +36,8 @@ export const INTELLIGENCE_CRITERIA: CriterionDef[] = [
   { key: "opp.entry_points", indicator: "OPPORTUNITY", label: "Entradas diferentes de contatos (formulário, agendamento, pedidos)", weight: 15 },
   { key: "opp.segment_need", indicator: "OPPORTUNITY", label: "Necessidade típica do segmento (hipótese de mercado)", weight: 20 },
   { key: "opp.scale", indicator: "OPPORTUNITY", label: "Escala da operação (equipe e unidades, dados empresariais)", weight: 15, requires: "business" },
+  { key: "opp.site_gaps", indicator: "OPPORTUNITY", label: "Falhas técnicas comprovadas no site (auditoria digital)", weight: 0, optIn: true },
+  { key: "opp.no_website", indicator: "OPPORTUNITY", label: "Sem site próprio (presença só em ficha ou redes)", weight: 0, optIn: true },
 
   { key: "rel.official", indicator: "RELIABILITY", label: "Contato confirmado no site oficial", weight: 25 },
   { key: "rel.cross_source", indicator: "RELIABILITY", label: "Telefone confirmado por duas fontes", weight: 20 },
@@ -232,8 +235,33 @@ function evaluateCriteria(c: CompanySnapshot, f: CompanyFacts, cfg: Intelligence
     else out["rel.registry"] = notMet(`CNPJ com situação ${b.registrationStatus} na Receita.`, ["biz.registry"]);
   }
 
+  // ── Opcionais (só entram com peso na configuração, por exemplo numa oferta de sites) ──
+  if (!c.website) out["opp.site_gaps"] = na("Sem site para auditar.");
+  else if (!c.auditSignals) out["opp.site_gaps"] = na("Sem auditoria digital concluída.");
+  else {
+    const failed = Object.entries(SITE_GAPS).filter(([k]) => c.auditSignals![k] === "FAIL").map(([, label]) => label);
+    if (failed.length >= 2) out["opp.site_gaps"] = met(`Falhas técnicas comprovadas na auditoria: ${failed.join(", ")}.`);
+    else if (failed.length === 1) out["opp.site_gaps"] = partial(`Uma falha técnica comprovada na auditoria: ${failed[0]}.`);
+    else out["opp.site_gaps"] = notMet("A última auditoria não encontrou falhas técnicas relevantes no site.");
+  }
+  if (c.website) out["opp.no_website"] = notMet("A empresa tem site próprio.");
+  else if (c.hasGoogleSource || c.socialProfiles.length) out["opp.no_website"] = met("Nenhum site próprio nas fontes; a presença é só pela ficha do Google ou redes sociais.");
+  else out["opp.no_website"] = na("Fontes insuficientes para saber se existe site próprio.");
+
   return out;
 }
+
+/** Critérios técnicos da auditoria digital (falha = FAIL comprovado) usados por "opp.site_gaps". */
+const SITE_GAPS: Record<string, string> = {
+  "site.reachable": "site fora do ar",
+  "site.https": "sem HTTPS",
+  "site.mobile": "sem adaptação a celular",
+  "site.performance": "carregamento lento",
+  "site.seo": "SEO técnico fraco",
+  "site.broken_links": "links quebrados",
+  "site.title": "página sem título",
+  "site.meta_description": "sem descrição para buscadores",
+};
 
 const normalizeWeights = (w: Record<IndicatorId, number>) => {
   const total = w.FIT + w.OPPORTUNITY + w.RELIABILITY;
@@ -250,7 +278,8 @@ export function scoreCompany(c: CompanySnapshot, f: CompanyFacts, cfg: Intellige
     const used = new Set<string>();
     const criteria: CriterionOutcome[] = [];
     // sem perfil empresarial, os critérios desse tipo não existem para a empresa (nem no peso total)
-    for (const def of INTELLIGENCE_CRITERIA.filter((d) => d.indicator === id && (!d.requires || c.business))) {
+    // critérios opcionais só existem com peso explícito: sem eles, as notas ficam iguais às da metodologia
+    for (const def of INTELLIGENCE_CRITERIA.filter((d) => d.indicator === id && (!d.requires || c.business) && (!d.optIn || (cfg.criteriaWeights[d.key] ?? 0) > 0))) {
       const weight = cfg.criteriaWeights[def.key] ?? def.weight;
       const e = evals[def.key] ?? na("Critério não avaliado.");
       // evidência já usada por outro critério do mesmo indicador não pontua de novo

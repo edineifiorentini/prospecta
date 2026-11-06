@@ -16,6 +16,8 @@ export type LighthouseSummary = {
   formFactor: "mobile";
   fetchedAt: string;
   finalUrl: string;
+  /** de onde veio a medição: Lighthouse local (padrão) ou PageSpeed Insights quando o Chromium não está disponível */
+  source?: "local" | "pagespeed";
 };
 
 export type AuditContext = {

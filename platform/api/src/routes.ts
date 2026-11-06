@@ -18,6 +18,7 @@ import { mapRoutes } from "./modules/maps/routes.ts";
 import { platformRoutes } from "./modules/platform/routes.ts";
 import { intelligenceRoutes } from "./modules/intelligence/routes.ts";
 import { companyDataRoutes } from "./modules/company-data/routes.ts";
+import { publicDataRoutes } from "./modules/public-data/routes.ts";
 
 export const registerRoutes: FastifyPluginAsyncZod = async (app) => {
   await app.register(healthRoutes);
@@ -39,4 +40,5 @@ export const registerRoutes: FastifyPluginAsyncZod = async (app) => {
   await app.register(platformRoutes);
   await app.register(intelligenceRoutes);
   await app.register(companyDataRoutes);
+  await app.register(publicDataRoutes);
 };

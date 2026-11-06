@@ -22,6 +22,9 @@ const money = (v: string | undefined) => (v ? Number(v.replace(/\./g, "").replac
 
 export type ReceitaFilters = { uf?: string; municipio?: string };
 
+/** provedores de e-mail gratuitos: o domínio não identifica a empresa (nem a de quem preencheu o cadastro) */
+const EMAIL_PROVIDERS = /^(gmail|googlemail|hotmail|outlook|live|msn|yahoo|ymail|icloud|me|uol|bol|terra|ig|globo|globomail|r7|zipmail|protonmail|proton|aol|gmx)\./;
+
 export function toEstabelecimento(c: string[], f: ReceitaFilters) {
   if (c.length < 28) return null;
   const uf = blank(c[19]);
@@ -52,7 +55,7 @@ export function toEstabelecimento(c: string[], f: ReceitaFilters) {
     uf,
     municipioCodigo: mun,
     telefones: [phone(c[21], c[22]), phone(c[23], c[24])].filter((x): x is string => !!x),
-    emailDominio: host && !isGenericDomain(host) ? host : null,
+    emailDominio: host && !isGenericDomain(host) && !EMAIL_PROVIDERS.test(host) ? host : null,
   };
 }
 

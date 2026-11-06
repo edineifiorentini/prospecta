@@ -5,7 +5,8 @@ import { assertSafeUrl, isPrivateIp, safeFetch } from "../../lib/safe-fetch.ts";
 import { env } from "../../config/env.ts";
 import type { LighthouseSummary } from "./evaluate.ts";
 
-async function chromePath(): Promise<string | undefined> {
+/** caminho do Chromium usado pelo Lighthouse local (undefined = não instalado) */
+export async function chromePath(): Promise<string | undefined> {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
   try {
     const { chromium } = await import("playwright");

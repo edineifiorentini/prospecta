@@ -8,6 +8,7 @@ import { processAuditJob } from "../modules/audit/service.ts";
 import { processSendMessage, refreshMessagingStatus } from "../modules/messaging/sender.ts";
 import { applyRetention, backfillDataQuality, reconcileStaleJobs, sendTaskReminders } from "../modules/maintenance/tasks.ts";
 import { processCompanyDataJob } from "../modules/company-data/service.ts";
+import { processPublicDataJob } from "../modules/public-data/jobs.ts";
 import { env } from "../config/env.ts";
 import type { MaintenanceJobData } from "../queues/index.ts";
 
@@ -29,6 +30,10 @@ export async function startWorkers(): Promise<Worker[]> {
 
   // dados empresariais pagos (Econodata): poucas ao mesmo tempo e abaixo do limite do fornecedor (60/min por chave)
   workers.push(new Worker(QUEUES.companyData, processCompanyDataJob, { connection: bullConnection(), concurrency: env.ECONODATA_MAX_CONCURRENT_REQUESTS, limiter: { max: 20, duration: 60_000 }, lockDuration: 180_000 }));
+
+  // fontes públicas (radar do PNCP): uma sincronização por vez; a diária só roda para contas que agendaram
+  workers.push(new Worker(QUEUES.publicData, processPublicDataJob, { connection: bullConnection(), concurrency: 1, lockDuration: 600_000 }));
+  await queue(QUEUES.publicData).upsertJobScheduler("radar-daily", { pattern: "0 6 * * *", tz: "America/Sao_Paulo" }, { name: "radar.scheduled", data: { task: "radar-scheduled" } });
 
   const maintenance = new Worker(
     QUEUES.maintenance,

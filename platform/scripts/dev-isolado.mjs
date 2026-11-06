@@ -28,6 +28,8 @@ const env = Object.fromEntries(
 env.HOST = "127.0.0.1";
 // dados empresariais: Econodata simulada (sem chave, sem rede e sem cobrança) no ambiente isolado
 env.ECONODATA_MOCK_MODE = "true";
+// fontes públicas simuladas (IBGE, PNCP, Transparência, Comex Stat, PageSpeed): sem rede no ambiente isolado
+env.PUBLIC_DATA_MOCK_MODE = "true";
 
 const which = process.argv[2];
 if (which === "api") {

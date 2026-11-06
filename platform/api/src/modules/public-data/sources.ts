@@ -116,7 +116,7 @@ export const PUBLIC_SOURCES: SourceDef[] = [
     scope: "regional",
     access: "api",
     docsUrl: "https://servicodados.ibge.gov.br/api/docs/",
-    ratePerMinute: 30,
+    ratePerMinute: 60,
     defaults: { enabled: false, concurrency: 1, cacheDays: 90, maxDailyRequests: 500, scheduled: false },
     description: "População, PIB e Cadastro Central de Empresas (unidades locais e pessoal ocupado por seção CNAE) do município.",
     caveat: "Estatística do município, com ano de referência próprio. Não descreve nenhuma empresa específica.",
@@ -158,5 +158,8 @@ export const PUBLIC_SOURCES: SourceDef[] = [
     caveat: "Só existe para companhias registradas na CVM com o mesmo CNPJ. Empresas fechadas não aparecem aqui.",
   },
 ];
+
+/** provedor do perfil empresarial vindo da base local da Receita (CompanyDataProfile.provider) */
+export const RECEITA_PROVIDER = "receita-aberta";
 
 export const sourceDef = (id: PublicSourceId) => PUBLIC_SOURCES.find((s) => s.id === id)!;

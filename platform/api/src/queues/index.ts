@@ -8,6 +8,7 @@ export const QUEUES = {
   messaging: "messaging",
   maintenance: "maintenance",
   companyData: "company-data",
+  publicData: "public-data",
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];

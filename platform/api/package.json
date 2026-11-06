@@ -21,7 +21,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
-    "cli:owner": "tsx --env-file-if-exists=../.env.dev src/cli/owner.ts"
+    "cli:owner": "tsx --env-file-if-exists=../.env.dev src/cli/owner.ts",
+    "cli:dados-publicos": "tsx --env-file-if-exists=../.env.dev src/cli/importar-dados-publicos.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.134.0",

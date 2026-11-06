@@ -32,5 +32,7 @@ export function integrationEnv(): Record<string, string> {
     // dados empresariais: só a Econodata simulada (sem rede e sem chave real) nos testes
     ECONODATA_MOCK_MODE: "true",
     ECONODATA_BASE_URL: "https://api.econodata.com.br",
+    // fontes públicas (IBGE, PNCP, Transparência, Comex Stat, PageSpeed): só as simuladas, sem rede
+    PUBLIC_DATA_MOCK_MODE: "true",
   };
 }
